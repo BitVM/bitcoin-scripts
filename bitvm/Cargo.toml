@@ -31,6 +31,7 @@ ark-crypto-primitives.workspace = true
 ark-relations.workspace = true
 tqdm.workspace = true
 regex.workspace = true
+arrayref.workspace = true
 
 [profile.dev]
 opt-level = 3

@@ -44,6 +44,7 @@ toml = "0.5.11"
 colored = "2.0.0"
 itertools = "0.13.0"
 serde-big-array = "0.5.1"
+arrayref = "0.3.9"
 num-bigint = { version = "0.4.4", features = ["rand"] }
 ark-std = { version = "0.4.0", default-features = false, features = ["print-trace"] }
 ark-crypto-primitives = { git = "https://github.com/arkworks-rs/crypto-primitives", features = ["snark", "sponge"] }

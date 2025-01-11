@@ -1645,6 +1645,7 @@ dependencies = [
  "ark-relations",
  "ark-serialize 0.4.2",
  "ark-std 0.4.0",
+ "arrayref",
  "bitcoin",
  "bitcoin-script",
  "bitcoin-script-stack",

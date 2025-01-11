@@ -10,7 +10,9 @@ use bitcoin::ScriptBuf;
 pub struct ScriptContext<F: ark_ff::Field> {
     pub inputs: Vec<F>,
     pub outputs: Vec<F>,
+    pub montgomery_form: bool,
     pub auxiliary: Vec<usize>,
+    pub auxiliary_output: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -76,7 +78,6 @@ impl PairingNative {
         let mut script_contexts = vec![];
 
         for b in scalar.iter().skip(1) {
-
             let (lambda, miu, res_x, res_y) = PairingNative::line_double_g2(&tmp);
 
             let mut script_context = ScriptContext::default();
@@ -341,61 +342,59 @@ mod test {
     use super::*;
     use std::str::FromStr;
 
-    
-    
-    
-    
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::bn254::fq::Fq;
-    
-    
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     use ark_ff::UniformRand;
     use ark_std::end_timer;
     use ark_std::start_timer;
-    
+
     use num_bigint::BigUint;
-    
-    
+
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    
-    
 
     #[test]
     fn test_g2_subgroup_check() {
-
         let mut prng = ChaCha20Rng::seed_from_u64(0);
-        
+
         #[allow(non_snake_case)]
         for _ in 0..1 {
             let P_POWER_ENDOMORPHISM_COEFF_0 = ark_bn254::Fq2::new(
-                ark_bn254::Fq::from_str("21575463638280843010398324269430826099269044274347216827212613867836435027261").unwrap(),
-                ark_bn254::Fq::from_str("10307601595873709700152284273816112264069230130616436755625194854815875713954").unwrap()
+                ark_bn254::Fq::from_str(
+                    "21575463638280843010398324269430826099269044274347216827212613867836435027261",
+                )
+                .unwrap(),
+                ark_bn254::Fq::from_str(
+                    "10307601595873709700152284273816112264069230130616436755625194854815875713954",
+                )
+                .unwrap(),
             );
 
             // PSI_Y = (u+9)^((p-1)/2) = TWIST_MUL_BY_Q_Y
             let P_POWER_ENDOMORPHISM_COEFF_1 = ark_bn254::Fq2::new(
-                ark_bn254::Fq::from_str("2821565182194536844548159561693502659359617185244120367078079554186484126554").unwrap(),
-                ark_bn254::Fq::from_str("3505843767911556378687030309984248845540243509899259641013678093033130930403").unwrap(),
+                ark_bn254::Fq::from_str(
+                    "2821565182194536844548159561693502659359617185244120367078079554186484126554",
+                )
+                .unwrap(),
+                ark_bn254::Fq::from_str(
+                    "3505843767911556378687030309984248845540243509899259641013678093033130930403",
+                )
+                .unwrap(),
             );
 
-            let scalar_bit: Vec<bool> = ark_ff::BitIteratorBE::without_leading_zeros(&[17887900258952609094, 8020209761171036667]).collect();
+            let scalar_bit: Vec<bool> = ark_ff::BitIteratorBE::without_leading_zeros(&[
+                17887900258952609094,
+                8020209761171036667,
+            ])
+            .collect();
 
             let p = ark_bn254::G2Affine::rand(&mut prng);
 
-            let scripts = PairingSplitScript::g2_subgroup_check([P_POWER_ENDOMORPHISM_COEFF_0, P_POWER_ENDOMORPHISM_COEFF_1], scalar_bit.clone());
+            let scripts = PairingSplitScript::g2_subgroup_check(
+                [P_POWER_ENDOMORPHISM_COEFF_0, P_POWER_ENDOMORPHISM_COEFF_1],
+                scalar_bit.clone(),
+            );
 
             println!(
                 "curves::test_g2_subgroup_check script chunk num = {}",
@@ -404,7 +403,11 @@ mod test {
 
             // **************** prepare witness data ******************
 
-            let (res, witness) = PairingNative::witness_g2_subgroup_check(&p, [P_POWER_ENDOMORPHISM_COEFF_0, P_POWER_ENDOMORPHISM_COEFF_1], scalar_bit.clone());
+            let (res, witness) = PairingNative::witness_g2_subgroup_check(
+                &p,
+                [P_POWER_ENDOMORPHISM_COEFF_0, P_POWER_ENDOMORPHISM_COEFF_1],
+                scalar_bit.clone(),
+            );
 
             assert!(res);
 
