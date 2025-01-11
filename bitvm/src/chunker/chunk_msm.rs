@@ -9,7 +9,7 @@ use super::assigner::BCAssigner;
 use super::elements::FrType;
 use super::segment::Segment;
 use crate::{
-    bn254::curves::G1Affine,
+    bn254::g1::G1Affine,
     chunker::elements::{ElementTrait, G1PointType},
 };
 
@@ -45,7 +45,7 @@ pub fn chunk_hinted_msm_with_constant_bases_affine<T: BCAssigner>(
             let segment = Segment::new_with_name(
                 format!("msm_add_{}", i),
                 script! {
-                    {G1Affine::push_not_montgomery(bases[i])}
+                    {G1Affine::push(bases[i])}
                 },
             )
             .add_result(&type_acc);

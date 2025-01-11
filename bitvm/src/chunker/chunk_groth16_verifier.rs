@@ -1,5 +1,5 @@
 use crate::bn254::ell_coeffs::G2Prepared;
-use crate::bn254::utils::collect_line_coeffs;
+use crate::bn254::g2::collect_line_coeffs;
 use crate::chunker::chunk_g1_points::g1_points;
 use crate::chunker::chunk_msm::chunk_hinted_msm_with_constant_bases_affine;
 use crate::chunker::chunk_non_fixed_point::chunk_q4;

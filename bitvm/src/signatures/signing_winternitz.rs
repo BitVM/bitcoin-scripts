@@ -138,7 +138,7 @@ mod tests {
     use crate::chunker::common::{equalverify, extract_witness_from_stack, u32_witness_to_bytes};
     use crate::execute_script_with_inputs;
     use crate::{
-        bn254::curves::G1Affine,
+        bn254::g1::G1Affine,
         chunker::common::BLAKE3_HASH_LENGTH,
         execute_script,
         signatures::{utils::digits_to_number, winternitz::generate_public_key},
@@ -229,7 +229,7 @@ mod tests {
         let random_g1_point = ark_bn254::G1Affine::rand(&mut rng);
 
         let res = execute_script(script! {
-            {G1Affine::push_not_montgomery(random_g1_point.clone())}
+            {G1Affine::push(random_g1_point.clone())}
         });
         let g1_to_bytes = u32_witness_to_bytes(extract_witness_from_stack(res));
         println!("g1_to_bytes: {:?}", g1_to_bytes);
@@ -241,7 +241,7 @@ mod tests {
 
         let s = script! {
             { generate_winternitz_checksig_leave_variable(&public_key, g1_point_bytes_length) }
-            {G1Affine::push_not_montgomery(random_g1_point)}
+            {G1Affine::push(random_g1_point)}
             {equalverify(g1_point_bytes_length / 4)}
             OP_TRUE
         };

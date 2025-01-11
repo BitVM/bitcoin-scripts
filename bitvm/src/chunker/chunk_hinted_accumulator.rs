@@ -3,12 +3,12 @@ use super::elements::Fq12Type;
 use super::segment::Segment;
 use crate::bn254::fp254impl::Fp254Impl;
 use crate::bn254::fq::Fq;
-use crate::bn254::utils::fq12_push_not_montgomery;
+use crate::bn254::fq12::Fq12;
 use crate::treepp::*;
 
 pub fn verify_accumulator(pa: Fq12Type) -> Vec<Segment> {
     let script = script! {
-        {fq12_push_not_montgomery(<ark_bn254::Fq12 as ark_ff::Field>::ONE)}
+        {Fq12::push(<ark_bn254::Fq12 as ark_ff::Field>::ONE)}
         {not_equal(Fq::N_LIMBS as usize * 12)}
     };
 
@@ -25,8 +25,7 @@ pub fn verify_accumulator(pa: Fq12Type) -> Vec<Segment> {
 mod test {
     use super::*;
     use crate::bn254::ell_coeffs::G2Prepared;
-
-    use crate::bn254::utils::collect_line_coeffs;
+    use crate::bn254::g2::collect_line_coeffs;
     use crate::chunker::assigner::*;
     use crate::chunker::chunk_accumulator::*;
     use crate::chunker::chunk_g1_points::*;

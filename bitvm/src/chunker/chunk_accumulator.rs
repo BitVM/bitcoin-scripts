@@ -10,7 +10,7 @@ use super::segment::*;
 use crate::bn254::ell_coeffs::EllCoeff;
 use crate::bn254::ell_coeffs::G2Prepared;
 use crate::bn254::fq12::Fq12;
-use crate::bn254::fq2::Fq2;
+use crate::bn254::g2::collect_line_coeffs;
 use crate::bn254::utils::*;
 use crate::treepp::*;
 
@@ -416,7 +416,6 @@ pub fn make_chunk_frobenius_map<T: BCAssigner>(
 mod test {
     use super::*;
     use crate::bn254::fq12::Fq12;
-    use crate::bn254::utils::fq12_push_not_montgomery;
     use crate::chunker::assigner::DummyAssigner;
     use crate::execute_script_with_inputs;
 
@@ -440,9 +439,9 @@ mod test {
             for hint in hints.clone() {
                 { hint.push() }
             }
-            { fq12_push_not_montgomery(a) }
+            { Fq12::push(a) }
             { hinted_square.clone() }
-            { fq12_push_not_montgomery(b) }
+            { Fq12::push(b) }
             { Fq12::equalverify() }
             OP_TRUE
         };

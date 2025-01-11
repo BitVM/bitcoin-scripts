@@ -1,12 +1,9 @@
 use crate::bn254::fp254impl::Fp254Impl;
 use crate::bn254::fq::Fq;
+use crate::bn254::utils::Hint;
 use crate::treepp::{script, Script};
 use ark_ff::{Field, Fp2Config};
-use std::ops::Add;
-
-use utils::Hint;
-
-use super::utils;
+use num_bigint::BigUint;
 
 pub struct Fq2;
 
@@ -44,23 +41,6 @@ impl Fq2 {
     }
 
     /// Square the top Fq2 element
-    ///
-    /// Optimized by: @Hakkush-07
-    pub fn square() -> Script {
-        script! {
-            { Fq::copy(1) }
-            { Fq::copy(1) }
-            { Fq::copy(1) }
-            { Fq::copy(1) }
-            { Fq::mul() }
-            { Fq::double(0) }
-            { Fq::sub(2, 1) }
-            { Fq::add(3, 2) }
-            { Fq::mul() }
-            { Fq::roll(1) }
-        }
-    }
-
     pub fn hinted_square(a: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();
         let (hinted_script1, hint1) = Fq::hinted_mul_keep_element(1, a.c0, 0, a.c1);
@@ -123,30 +103,6 @@ impl Fq2 {
         }
     }
 
-    pub fn mul(mut a: u32, mut b: u32) -> Script {
-        if a < b {
-            (a, b) = (b, a);
-        }
-
-        // The degree-2 extension on BN254 Fq is under the polynomial x^2 + 1
-        script! {
-            { Fq::copy(a + 1) }
-            { Fq::copy(b + 1 + 1) }
-            { Fq::mul() }
-            { Fq::copy(a + 1) }
-            { Fq::copy(b + 1 + 1) }
-            { Fq::mul() }
-            { Fq::add(a + 2, a + 3) }
-            { Fq::add(b + 3, b + 4) }
-            { Fq::mul() }
-            { Fq::copy(2) }
-            { Fq::copy(2) }
-            { Fq::sub(1, 0) }
-            { Fq::add(3, 2) }
-            { Fq::sub(2, 0) }
-        }
-    }
-
     pub fn hinted_mul(mut a_depth: u32, mut a: ark_bn254::Fq2, mut b_depth: u32, mut b: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         if a_depth < b_depth {
             (a_depth, b_depth) = (b_depth, a_depth);
@@ -177,33 +133,9 @@ impl Fq2 {
         (script, hints)
     }
 
-    pub fn mul_by_fq(mut a: u32, b: u32) -> Script {
-        if a < b {
-            a += 1;
-        }
-
-        script! {
-            { Fq::copy(b) }
-            { Fq::roll(a + 2) }
-
-            { Fq::mul() }
-            { Fq::roll(b + 1) }
-            { Fq::roll(a + 1) }
-
-            { Fq::mul() }
-        }
-    }
-
     pub fn push_one() -> Script {
         script! {
             { Fq::push_one() }
-            { Fq::push_zero() }
-        }
-    }
-
-    pub fn push_one_not_montgomery() -> Script {
-        script! {
-            { Fq::push_one_not_montgomery() }
             { Fq::push_zero() }
         }
     }
@@ -212,6 +144,25 @@ impl Fq2 {
         script! {
             { Fq::push_zero() }
             { Fq::push_zero() }
+        }
+    }
+    
+    pub fn push(a: ark_bn254::Fq2) -> Script {
+        script! {
+            { Fq::push_u32_le(&BigUint::from(a.c0).to_u32_digits()) }
+            { Fq::push_u32_le(&BigUint::from(a.c1).to_u32_digits()) }
+        }
+    }
+
+    pub fn read_from_stack(witness: Vec<Vec<u8>>) -> ark_bn254::Fq2 {
+        assert_eq!(witness.len() as u32, Fq::N_LIMBS * 2);
+        let c0 = Fq::read_u32_le(witness[0..Fq::N_LIMBS as usize].to_vec());
+        let c1 = Fq::read_u32_le(
+            witness[Fq::N_LIMBS as usize..2 * Fq::N_LIMBS as usize].to_vec(),
+        );
+        ark_bn254::Fq2 {
+            c0: BigUint::from_slice(&c0).into(),
+            c1: BigUint::from_slice(&c1).into(),
         }
     }
 
@@ -250,7 +201,7 @@ impl Fq2 {
             // [t0inv, a0, a1, t0, t0inv]
             // compute inv v0
             { idmul} // t1 <- t0.inv
-            { utils::fq_push_not_montgomery(ark_bn254::Fq::ONE)}
+            { Fq::push(ark_bn254::Fq::ONE)}
             { Fq::equalverify(1, 0)}
             {Fq::roll(2)}
             // [a0, a1, t1]
@@ -279,39 +230,6 @@ impl Fq2 {
         return (scr, all_hints);
     }
 
-    pub fn inv() -> Script {
-        script! {
-            // copy c1
-            { Fq::copy(0) }
-
-            // compute v1 = c1^2
-            { Fq::square() }
-
-            // copy c0
-            { Fq::copy(2) }
-
-            // compute v0 = c0^2 + v1
-            { Fq::square() }
-            { Fq::add(1, 0) }
-
-            // compute inv v0
-            { Fq::inv() }
-
-            // dup inv v0
-            { Fq::copy(0) }
-
-            // compute c0
-            { Fq::roll(3) }
-            { Fq::mul() }
-
-            // compute c1
-            { Fq::roll(2) }
-            { Fq::roll(2) }
-            { Fq::mul() }
-            { Fq::neg(0) }
-        }
-    }
-
     pub fn div2() -> Script {
         script! {
             { Fq::roll(1) }
@@ -338,31 +256,8 @@ impl Fq2 {
         }
     }
 
-    pub fn frobenius_map(i: usize) -> Script {
-        script! {
-            { Fq::mul_by_constant(&ark_bn254::Fq2Config::FROBENIUS_COEFF_FP2_C1[i % ark_bn254::Fq2Config::FROBENIUS_COEFF_FP2_C1.len()]) }
-        }
-    }
-
     pub fn hinted_frobenius_map(i: usize, a: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         Fq::hinted_mul_by_constant(a.c1, &ark_bn254::Fq2Config::FROBENIUS_COEFF_FP2_C1[i % ark_bn254::Fq2Config::FROBENIUS_COEFF_FP2_C1.len()])
-    }
-
-    pub fn mul_by_constant(constant: &ark_bn254::Fq2) -> Script {
-        script! {
-            { Fq::copy(1) }
-            { Fq::mul_by_constant(&constant.c0) }
-            { Fq::copy(1) }
-            { Fq::mul_by_constant(&constant.c1) }
-            { Fq::add(3, 2) }
-            { Fq::mul_by_constant(&constant.c0.add(constant.c1)) }
-            { Fq::copy(2) }
-            { Fq::copy(2) }
-            { Fq::add(1, 0) }
-            { Fq::sub(1, 0) }
-            { Fq::sub(2, 1) }
-            { Fq::roll(1) }
-        }
     }
 
     pub fn hinted_mul_by_constant(a: ark_bn254::Fq2, constant: &ark_bn254::Fq2) -> (Script, Vec<Hint>) {
@@ -424,13 +319,10 @@ impl Fq2 {
 mod test {
     use crate::bn254::fq::Fq;
     use crate::bn254::fq2::Fq2;
-    use crate::bn254::utils::{fq2_push_not_montgomery, fq_push_not_montgomery};
-    use crate::bn254::{fp254impl::Fp254Impl, utils::fq2_push};
     use crate::treepp::*;
     use ark_ff::Field;
     use ark_std::UniformRand;
     use core::ops::{Add, Mul};
-    use num_bigint::BigUint;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
     use ark_ff::AdditiveGroup;
@@ -446,20 +338,20 @@ mod test {
             let c = a + b;
 
             let script = script! {
-                { fq2_push(a) }
-                { fq2_push(b) }
+                { Fq2::push(a) }
+                { Fq2::push(b) }
                 { Fq2::add(2, 0) }
-                { fq2_push(c) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
             run(script);
 
             let script = script! {
-                { fq2_push(a) }
-                { fq2_push(b) }
+                { Fq2::push(a) }
+                { Fq2::push(b) }
                 { Fq2::add(0, 2) }
-                { fq2_push(c) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -478,20 +370,20 @@ mod test {
             let c = a - b;
 
             let script = script! {
-                { fq2_push(a) }
-                { fq2_push(b) }
+                { Fq2::push(a) }
+                { Fq2::push(b) }
                 { Fq2::sub(2, 0) }
-                { fq2_push(c) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
             run(script);
 
             let script = script! {
-                { fq2_push(b) }
-                { fq2_push(a) }
+                { Fq2::push(b) }
+                { Fq2::push(a) }
                 { Fq2::sub(0, 2) }
-                { fq2_push(c) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -509,9 +401,9 @@ mod test {
             let c = a.double();
 
             let script = script! {
-                { fq2_push(a) }
+                { Fq2::push(a) }
                 { Fq2::double(0) }
-                { fq2_push(c) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -536,10 +428,10 @@ mod test {
                 for hint in hints { 
                     { hint.push() }
                 }
-                { fq2_push_not_montgomery(a) }
-                { fq2_push_not_montgomery(b) }
+                { Fq2::push(a) }
+                { Fq2::push(b) }
                 { hinted_mul.clone() }
-                { fq2_push_not_montgomery(c) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -569,9 +461,9 @@ mod test {
                 for hint in hints { 
                     { hint.push() }
                 }
-                { fq2_push_not_montgomery(a) }
+                { Fq2::push(a) }
                 { hinted_mul.clone() }
-                { fq2_push_not_montgomery(c) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -582,51 +474,6 @@ mod test {
             println!("Fq2::hinted_mul_by_constant: {} @ {} stack", hinted_mul.len(), max_stack);
         }
 
-    }
-
-    #[test]
-    fn test_bn254_fq2_mul() {
-        println!("Fq2.mul: {} bytes", Fq2::mul(1, 0).len());
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..1 {
-            let a = ark_bn254::Fq2::rand(&mut prng);
-            let b = ark_bn254::Fq2::rand(&mut prng);
-            let c = a.mul(&b);
-
-            let script = script! {
-                { fq2_push(a) }
-                { fq2_push(b) }
-                { Fq2::mul(2, 0) }
-                { fq2_push(c) }
-                { Fq2::equalverify() }
-                OP_TRUE
-            };
-            run(script);
-        }
-    }
-
-    #[test]
-    fn test_bn254_fq2_mul_by_fq() {
-        println!("Fq2.mul_by_fq: {} bytes", Fq2::mul_by_fq(1, 0).len());
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..10 {
-            let a = ark_bn254::Fq2::rand(&mut prng);
-            let b = ark_bn254::Fq::rand(&mut prng);
-            let mut c = a;
-            c.mul_assign_by_fp(&b);
-
-            let script = script! {
-                { fq2_push(a) }
-                { Fq::push_u32_le(&BigUint::from(b).to_u32_digits()) }
-                { Fq2::mul_by_fq(1, 0) }
-                { fq2_push(c) }
-                { Fq2::equalverify() }
-                OP_TRUE
-            };
-            run(script);
-        }
     }
 
     #[test]
@@ -648,10 +495,10 @@ mod test {
                 for hint in hints {
                     { hint.push() }
                 }
-                { fq_push_not_montgomery(t1)}
-                { fq2_push_not_montgomery(a) }
+                { Fq::push(t1)}
+                { Fq2::push(a) }
                 { invs }
-                { fq2_push_not_montgomery(b) }
+                { Fq2::push(b) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -661,46 +508,6 @@ mod test {
                 println!("{i:3}: {:?}", res.final_stack.get(i));
             }
             println!("fq2 inv len {}", len);
-    }
-
-    #[test]
-    fn test_bn254_fq2_inv() {
-        println!("Fq2.inv: {} bytes", Fq2::inv().len());
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..1 {
-            let a = ark_bn254::Fq2::rand(&mut prng);
-            let b = a.inverse().unwrap();
-
-            let script = script! {
-                { fq2_push(a) }
-                { Fq2::inv() }
-                { fq2_push(b) }
-                { Fq2::equalverify() }
-                OP_TRUE
-            };
-            run(script);
-        }
-    }
-
-    #[test]
-    fn test_bn254_fq2_square() {
-        println!("Fq2.square: {} bytes", Fq2::square().len());
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..10 {
-            let a = ark_bn254::Fq2::rand(&mut prng);
-            let b = a.square();
-
-            let script = script! {
-                { fq2_push(a) }
-                { Fq2::square() }
-                { fq2_push(b) }
-                { Fq2::equalverify() }
-                OP_TRUE
-            };
-            run(script);
-        }
     }
 
     #[test]
@@ -719,9 +526,9 @@ mod test {
                 for hint in hints { 
                     { hint.push() }
                 }
-                { fq2_push_not_montgomery(a) }
+                { Fq2::push(a) }
                 { hinted_square.clone() }
-                { fq2_push_not_montgomery(c) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -744,9 +551,9 @@ mod test {
             let b = a.double();
 
             let script = script! {
-                { fq2_push(b) }
+                { Fq2::push(b) }
                 { Fq2::div2() }
-                { fq2_push(a) }
+                { Fq2::push(a) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -765,9 +572,9 @@ mod test {
             let c = a.add(b);
 
             let script = script! {
-                { fq2_push(c) }
+                { Fq2::push(c) }
                 { Fq2::div3() }
-                { fq2_push(a) }
+                { Fq2::push(a) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -786,48 +593,9 @@ mod test {
             let c = a.add(b);
 
             let script = script! {
-                { fq2_push(a) }
+                { Fq2::push(a) }
                 { Fq2::triple(0) }
-                { fq2_push(c) }
-                { Fq2::equalverify() }
-                OP_TRUE
-            };
-            run(script);
-        }
-    }
-
-    #[test]
-    fn test_bn254_fq2_frobenius_map() {
-        println!(
-            "Fq2.frobenius_map(0): {} bytes",
-            Fq2::frobenius_map(0).len()
-        );
-        println!(
-            "Fq2.frobenius_map(1): {} bytes",
-            Fq2::frobenius_map(1).len()
-        );
-
-        let mut prng = ChaCha20Rng::seed_from_u64(0);
-
-        for _ in 0..3 {
-            let a = ark_bn254::Fq2::rand(&mut prng);
-            let b = a.frobenius_map(0);
-
-            let script = script! {
-                { fq2_push(a) }
-                { Fq2::frobenius_map(0) }
-                { fq2_push(b) }
-                { Fq2::equalverify() }
-                OP_TRUE
-            };
-            run(script);
-
-            let b = a.frobenius_map(1);
-
-            let script = script! {
-                { fq2_push(a) }
-                { Fq2::frobenius_map(1) }
-                { fq2_push(b) }
+                { Fq2::push(c) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -850,9 +618,9 @@ mod test {
                 for hint in hints { 
                     { hint.push() }
                 }
-                { fq2_push_not_montgomery(a) }
+                { Fq2::push(a) }
                 { hinted_frobenius_map_0 }
-                { fq2_push_not_montgomery(b) }
+                { Fq2::push(b) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };
@@ -868,9 +636,9 @@ mod test {
                 for hint in hints { 
                     { hint.push() }
                 }
-                { fq2_push_not_montgomery(a) }
+                { Fq2::push(a) }
                 { hinted_frobenius_map_1 }
-                { fq2_push_not_montgomery(b) }
+                { Fq2::push(b) }
                 { Fq2::equalverify() }
                 OP_TRUE
             };

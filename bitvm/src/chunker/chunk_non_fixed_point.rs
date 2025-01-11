@@ -3,7 +3,7 @@ use crate::bn254::ell_coeffs::G2Prepared;
 use crate::bn254::fp254impl::Fp254Impl;
 use crate::bn254::fq::Fq;
 use crate::bn254::fq2::Fq2;
-use crate::bn254::utils::*;
+use crate::bn254::g2::{collect_line_coeffs, hinted_affine_add_line, hinted_affine_double_line, hinted_check_chord_line, hinted_check_tangent_line};
 use crate::chunker::elements::ElementTrait;
 use crate::treepp::*;
 use ark_ec::bn::BnConfig;
@@ -263,16 +263,16 @@ pub fn chunk_q4<T: BCAssigner>(
                  {Fq2::drop()}
                 // [c3(2), c4(2), t4(4), q4(4)]
                 {Fq::neg(0)}
-                { Fq::push_dec_not_montgomery("2821565182194536844548159561693502659359617185244120367078079554186484126554") }
-                { Fq::push_dec_not_montgomery("3505843767911556378687030309984248845540243509899259641013678093033130930403") }
+                { Fq::push_dec("2821565182194536844548159561693502659359617185244120367078079554186484126554") }
+                { Fq::push_dec("3505843767911556378687030309984248845540243509899259641013678093033130930403") }
                 // [c3(2), c4(2), t4(4), q4.x(2), -q4.y(2), beta13(2)]
                 { q4y_mul_hinted_script }
                 { Fq2::toaltstack() }
 
                 {Fq::neg(0)}
                 // [t4, -q4.x]
-                { Fq::push_dec_not_montgomery("21575463638280843010398324269430826099269044274347216827212613867836435027261") }
-                { Fq::push_dec_not_montgomery("10307601595873709700152284273816112264069230130616436755625194854815875713954") }
+                { Fq::push_dec("21575463638280843010398324269430826099269044274347216827212613867836435027261") }
+                { Fq::push_dec("10307601595873709700152284273816112264069230130616436755625194854815875713954") }
                 // [t4, q4x, beta12]
                 { q4x_mul_hinted_script }
                 { Fq2::fromaltstack() }
@@ -349,7 +349,7 @@ pub fn chunk_q4<T: BCAssigner>(
                 // [c3(2),c4(2),t4(4), q4(4)]
                 {Fq2::toaltstack()}
                 // [c3(2),c4(2),t4(4), q4x(2) | q4y(2)]
-                { Fq::push_dec_not_montgomery("21888242871839275220042445260109153167277707414472061641714758635765020556616") }
+                { Fq::push_dec("21888242871839275220042445260109153167277707414472061641714758635765020556616") }
                 { Fq::push_zero() }
                 {mul_x_hinted_script}
                 { Fq2::fromaltstack() }
@@ -377,7 +377,7 @@ pub fn chunk_q4<T: BCAssigner>(
 mod tests {
     use super::chunk_q4;
     use crate::bn254::ell_coeffs::G2Prepared;
-    use crate::bn254::utils::collect_line_coeffs;
+    use crate::bn254::g2::collect_line_coeffs;
     use crate::chunker::assigner::DummyAssigner;
     use crate::chunker::elements::{ElementTrait, DataType::Fq6Data, Fq6Type, G2PointType};
     use crate::execute_script_with_inputs;

@@ -1,9 +1,10 @@
 use super::common::*;
-use crate::bn254::curves::{G1Affine, G2Affine};
-use crate::bn254::utils::{
-    fq12_push_not_montgomery, fq2_push_not_montgomery, fq6_push_not_montgomery,
-    fq_push_not_montgomery, fr_push_not_montgomery,
-};
+use crate::bn254::fq::Fq;
+use crate::bn254::fq12::Fq12;
+use crate::bn254::fq2::Fq2;
+use crate::bn254::fq6::Fq6;
+use crate::bn254::fr::Fr;
+use crate::bn254::{g1::G1Affine, g2::G2Affine};
 use crate::treepp::*;
 use crate::{chunker::assigner::BCAssigner, execute_script_with_inputs};
 use std::any::Any;
@@ -163,19 +164,19 @@ macro_rules! impl_element_trait {
 }
 
 // (Fq)
-impl_element_trait!(FqType, FqData, 1, fq_push_not_montgomery);
+impl_element_trait!(FqType, FqData, 1, Fq::push);
 // (Fr)
-impl_element_trait!(FrType, FrData, 1, fr_push_not_montgomery);
+impl_element_trait!(FrType, FrData, 1, Fr::push);
 // (Fq2)
-impl_element_trait!(Fq2Type, Fq2Data, 2, fq2_push_not_montgomery);
+impl_element_trait!(Fq2Type, Fq2Data, 2, Fq2::push);
 // (Fq6)
-impl_element_trait!(Fq6Type, Fq6Data, 6, fq6_push_not_montgomery);
+impl_element_trait!(Fq6Type, Fq6Data, 6, Fq6::push);
 // (Fq12)
-impl_element_trait!(Fq12Type, Fq12Data, 12, fq12_push_not_montgomery);
+impl_element_trait!(Fq12Type, Fq12Data, 12, Fq12::push);
 // (x: Fq, y: Fq)
-impl_element_trait!(G1PointType, G1PointData, 2, G1Affine::push_not_montgomery);
+impl_element_trait!(G1PointType, G1PointData, 2, G1Affine::push);
 // (x: Fq, y: Fq2)
-impl_element_trait!(G2PointType, G2PointData, 4, G2Affine::push_not_montgomery);
+impl_element_trait!(G2PointType, G2PointData, 4, G2Affine::push);
 
 #[derive(Debug, Clone)]
 pub struct DummyElement {
