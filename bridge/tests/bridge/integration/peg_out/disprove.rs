@@ -9,9 +9,9 @@ use bridge::{
     scripts::generate_pay_to_pubkey_script_address,
     transactions::{
         assert_transactions::{
-            assert_commit_1::AssertCommit1Transaction,
-            assert_commit_2::AssertCommit2Transaction, assert_final::AssertFinalTransaction,
-            assert_initial::AssertInitialTransaction, utils::sign_assert_tx_with_groth16_proof,
+            assert_commit_1::AssertCommit1Transaction, assert_commit_2::AssertCommit2Transaction,
+            assert_final::AssertFinalTransaction, assert_initial::AssertInitialTransaction,
+            utils::sign_assert_tx_with_groth16_proof,
         },
         base::{BaseTransaction, Input},
         disprove::DisproveTransaction,
@@ -124,7 +124,6 @@ async fn test_disprove_success() {
     // assert commit 1
     let mut vout_base = 1; // connector E
     let mut assert_commit_1 = AssertCommit1Transaction::new(
-        &config.operator_context,
         &config.assert_commit_connectors_e_1,
         &config.assert_commit_connectors_f.connector_f_1,
         (0..config.assert_commit_connectors_e_1.connectors_num())
@@ -138,7 +137,6 @@ async fn test_disprove_success() {
             .collect(),
     );
     assert_commit_1.sign(
-        &config.operator_context,
         &config.assert_commit_connectors_e_1,
         witness_for_commit1.clone(),
     );
@@ -167,7 +165,6 @@ async fn test_disprove_success() {
         amount: assert_initial_tx.output[vout as usize].value,
     };
     let mut assert_commit_2 = AssertCommit2Transaction::new(
-        &config.operator_context,
         &config.assert_commit_connectors_e_2,
         &config.assert_commit_connectors_f.connector_f_2,
         (0..config.assert_commit_connectors_e_2.connectors_num())
@@ -181,7 +178,6 @@ async fn test_disprove_success() {
             .collect(),
     );
     assert_commit_2.sign(
-        &config.operator_context,
         &config.assert_commit_connectors_e_2,
         witness_for_commit2.clone(),
     );

@@ -206,7 +206,6 @@ impl Take1Transaction {
         let input_index = 1;
         pre_sign_taproot_input_default(
             self,
-            context,
             input_index,
             TapSighashType::All,
             connector_a.generate_taproot_spend_info(),
@@ -218,7 +217,6 @@ impl Take1Transaction {
         let input_index = 2;
         pre_sign_p2wsh_input(
             self,
-            context,
             input_index,
             EcdsaSighashType::All,
             &vec![&context.operator_keypair],

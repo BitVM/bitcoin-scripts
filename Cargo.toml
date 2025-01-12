@@ -50,6 +50,7 @@ ark-crypto-primitives = { git = "https://github.com/arkworks-rs/crypto-primitive
 ark-relations = { git = "https://github.com/arkworks-rs/snark/" }
 serial_test = "*"
 tqdm = "0.7"
+secp256k1 = { version = "0.29.1", features = ["global-context"]}
 
 [profile.dev]
 opt-level = 3

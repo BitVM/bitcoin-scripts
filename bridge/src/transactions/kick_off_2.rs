@@ -105,7 +105,6 @@ impl KickOff2Transaction {
         let mut unlock_data: Vec<Vec<u8>> = Vec::new();
 
         let schnorr_signature = generate_taproot_leaf_schnorr_signature(
-            context,
             self.tx_mut(),
             prev_outs,
             input_index,

@@ -67,7 +67,6 @@ async fn test_challenge_tx() {
     );
 
     challenge_tx.add_inputs_and_output(
-        &config.depositor_context,
         &vec![
             InputWithScript {
                 outpoint: crowdfunding_outpoints[0],

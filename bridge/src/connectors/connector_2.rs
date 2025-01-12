@@ -4,20 +4,18 @@ use crate::{
     constants::{N_SEQUENCE_FOR_LOCK_TIME, START_TIME_MESSAGE_LENGTH},
     graphs::peg_out::CommitmentMessageId,
 };
-use bitvm::{
-    signatures::{
-        utils::digits_to_number,
-        signing_winternitz::{
-            winternitz_message_checksig, WinternitzPublicKey, LOG_D,
-        },
-    },
-    treepp::script
-};
 use bitcoin::{
-    key::Secp256k1,
     taproot::{TaprootBuilder, TaprootSpendInfo},
     Address, Network, ScriptBuf, TxIn, XOnlyPublicKey,
 };
+use bitvm::{
+    signatures::{
+        signing_winternitz::{winternitz_message_checksig, WinternitzPublicKey, LOG_D},
+        utils::digits_to_number,
+    },
+    treepp::script,
+};
+use secp256k1::SECP256K1;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -102,7 +100,7 @@ impl TaprootConnector for Connector2 {
             .expect("Unable to add leaf 0")
             .add_leaf(1, self.generate_taproot_leaf_1_script())
             .expect("Unable to add leaf 1")
-            .finalize(&Secp256k1::new(), self.n_of_n_taproot_public_key)
+            .finalize(SECP256K1, self.n_of_n_taproot_public_key)
             .expect("Unable to finalize taproot")
     }
 

@@ -33,9 +33,8 @@ use crate::{
             assert_final::AssertFinalTransaction,
             assert_initial::AssertInitialTransaction,
             utils::{
-                groth16_commitment_secrets_to_public_keys,
-                merge_to_connector_c_commits_public_key, AssertCommit1ConnectorsE,
-                AssertCommit2ConnectorsE, AssertCommitConnectorsF,
+                groth16_commitment_secrets_to_public_keys, merge_to_connector_c_commits_public_key,
+                AssertCommit1ConnectorsE, AssertCommit2ConnectorsE, AssertCommitConnectorsF,
             },
         },
         pre_signed_musig2::PreSignedMusig2Transaction,
@@ -47,8 +46,9 @@ use bitvm::chunker::{
     common::BLAKE3_HASH_LENGTH,
     disprove_execution::{disprove_exec, RawProof},
 };
-use bitvm::signatures::signing_winternitz::{WinternitzSigningInputs, WinternitzPublicKey, WinternitzSecret};
-
+use bitvm::signatures::signing_winternitz::{
+    WinternitzPublicKey, WinternitzSecret, WinternitzSigningInputs,
+};
 
 use super::{
     super::{
@@ -59,7 +59,7 @@ use super::{
             connector_6::Connector6, connector_a::ConnectorA, connector_b::ConnectorB,
             connector_c::ConnectorC,
         },
-        contexts::{base::BaseContext, operator::OperatorContext, verifier::VerifierContext},
+        contexts::{operator::OperatorContext, verifier::VerifierContext},
         transactions::{
             base::{
                 validate_transaction, verify_public_nonces_for_tx, BaseTransaction, Input,
@@ -350,13 +350,9 @@ pub struct PegOutGraph {
 }
 
 impl BaseGraph for PegOutGraph {
-    fn network(&self) -> Network {
-        self.network
-    }
+    fn network(&self) -> Network { self.network }
 
-    fn id(&self) -> &String {
-        &self.id
-    }
+    fn id(&self) -> &String { &self.id }
 
     fn verifier_sign(
         &mut self,
@@ -638,7 +634,6 @@ impl PegOutGraph {
         // assert commit txs
         let mut vout_base = 1;
         let assert_commit1_transaction = AssertCommit1Transaction::new(
-            context,
             &connectors.assert_commit_connectors_e_1,
             &connectors.assert_commit_connectors_f.connector_f_1,
             (0..connectors.assert_commit_connectors_e_1.connectors_num())
@@ -655,7 +650,6 @@ impl PegOutGraph {
         vout_base += connectors.assert_commit_connectors_e_1.connectors_num();
 
         let assert_commit2_transaction = AssertCommit2Transaction::new(
-            context,
             &connectors.assert_commit_connectors_e_2,
             &connectors.assert_commit_connectors_f.connector_f_2,
             (0..connectors.assert_commit_connectors_e_2.connectors_num())
@@ -1562,7 +1556,6 @@ impl PegOutGraph {
     pub async fn challenge(
         &mut self,
         client: &AsyncClient,
-        context: &dyn BaseContext,
         crowdfundng_inputs: &Vec<InputWithScript<'_>>,
         keypair: &Keypair,
         output_script_pubkey: ScriptBuf,
@@ -1575,7 +1568,6 @@ impl PegOutGraph {
         if kick_off_1_status.is_ok_and(|status| status.confirmed) {
             // complete challenge tx
             self.challenge_transaction.add_inputs_and_output(
-                context,
                 crowdfundng_inputs,
                 keypair,
                 output_script_pubkey,
@@ -1947,9 +1939,7 @@ impl PegOutGraph {
         }
     }
 
-    pub fn is_peg_out_initiated(&self) -> bool {
-        self.peg_out_chain_event.is_some()
-    }
+    pub fn is_peg_out_initiated(&self) -> bool { self.peg_out_chain_event.is_some() }
 
     pub async fn match_and_set_peg_out_event(
         &mut self,

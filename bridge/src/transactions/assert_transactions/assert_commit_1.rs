@@ -5,28 +5,26 @@ use rand::seq::index;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-        graphs::peg_out::CommitmentMessageId,
-        transactions::signing::{
-            populate_p2wsh_witness_with_signatures, populate_taproot_input_witness,
-            push_p2wsh_script_to_witness, push_taproot_leaf_unlock_data_to_witness,
-        },
+    graphs::peg_out::CommitmentMessageId,
+    transactions::signing::{
+        populate_p2wsh_witness_with_signatures, populate_taproot_input_witness,
+        push_p2wsh_script_to_witness, push_taproot_leaf_unlock_data_to_witness,
+    },
 };
 
-use bitvm::{
-    chunker::common::RawWitness,
-    execute_raw_script_with_inputs, execute_script_with_inputs,
-};
 use super::{
     super::{
         super::{
             connectors::{base::*, connector_f_1::ConnectorF1},
-            contexts::operator::OperatorContext,
             graphs::base::FEE_AMOUNT,
         },
         base::*,
         pre_signed::*,
     },
     utils::AssertCommit1ConnectorsE,
+};
+use bitvm::{
+    chunker::common::RawWitness, execute_raw_script_with_inputs, execute_script_with_inputs,
 };
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -39,26 +37,17 @@ pub struct AssertCommit1Transaction {
 }
 
 impl PreSignedTransaction for AssertCommit1Transaction {
-    fn tx(&self) -> &Transaction {
-        &self.tx
-    }
+    fn tx(&self) -> &Transaction { &self.tx }
 
-    fn tx_mut(&mut self) -> &mut Transaction {
-        &mut self.tx
-    }
+    fn tx_mut(&mut self) -> &mut Transaction { &mut self.tx }
 
-    fn prev_outs(&self) -> &Vec<TxOut> {
-        &self.prev_outs
-    }
+    fn prev_outs(&self) -> &Vec<TxOut> { &self.prev_outs }
 
-    fn prev_scripts(&self) -> &Vec<ScriptBuf> {
-        &self.prev_scripts
-    }
+    fn prev_scripts(&self) -> &Vec<ScriptBuf> { &self.prev_scripts }
 }
 
 impl AssertCommit1Transaction {
     pub fn new(
-        context: &OperatorContext,
         connectors_e: &AssertCommit1ConnectorsE,
         connector_f_1: &ConnectorF1,
         tx_inputs: Vec<Input>,
@@ -114,12 +103,7 @@ impl AssertCommit1Transaction {
         }
     }
 
-    pub fn sign(
-        &mut self,
-        context: &OperatorContext,
-        connectors_e: &AssertCommit1ConnectorsE,
-        witnesses: Vec<RawWitness>,
-    ) {
+    pub fn sign(&mut self, connectors_e: &AssertCommit1ConnectorsE, witnesses: Vec<RawWitness>) {
         assert_eq!(witnesses.len(), connectors_e.connectors_num());
         for (input_index, witness) in (0..connectors_e.connectors_num()).zip(witnesses) {
             let taproot_spend_info = connectors_e
@@ -140,7 +124,5 @@ impl AssertCommit1Transaction {
 }
 
 impl BaseTransaction for AssertCommit1Transaction {
-    fn finalize(&self) -> Transaction {
-        self.tx.clone()
-    }
+    fn finalize(&self) -> Transaction { self.tx.clone() }
 }

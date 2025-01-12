@@ -15,7 +15,9 @@ use super::{
     signing::{generate_taproot_leaf_schnorr_signature, populate_taproot_input_witness},
 };
 
-use bitvm::signatures::signing_winternitz::{generate_winternitz_witness, WinternitzSecret, WinternitzSigningInputs};
+use bitvm::signatures::signing_winternitz::{
+    generate_winternitz_witness, WinternitzSecret, WinternitzSigningInputs,
+};
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct StartTimeTransaction {
@@ -123,7 +125,6 @@ impl StartTimeTransaction {
 
         // get schnorr signature
         let schnorr_signature = generate_taproot_leaf_schnorr_signature(
-            context,
             self.tx_mut(),
             prev_outs,
             input_index,

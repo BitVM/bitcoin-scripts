@@ -19,7 +19,6 @@ pub trait PreSignedTransaction {
 
 pub fn pre_sign_p2wsh_input<T: PreSignedTransaction>(
     tx: &mut T,
-    context: &dyn BaseContext,
     input_index: usize,
     sighash_type: EcdsaSighashType,
     keypairs: &Vec<&Keypair>,
@@ -28,7 +27,6 @@ pub fn pre_sign_p2wsh_input<T: PreSignedTransaction>(
     let value = tx.prev_outs()[input_index].value;
 
     populate_p2wsh_witness(
-        context,
         tx.tx_mut(),
         input_index,
         sighash_type,
@@ -61,7 +59,6 @@ pub fn pre_sign_p2wpkh_input<T: PreSignedTransaction>(
 
 pub fn pre_sign_taproot_input_default<T: PreSignedTransaction>(
     tx: &mut T,
-    context: &dyn BaseContext,
     input_index: usize,
     sighash_type: TapSighashType,
     taproot_spend_info: TaprootSpendInfo,
@@ -71,7 +68,6 @@ pub fn pre_sign_taproot_input_default<T: PreSignedTransaction>(
     let script = &tx.prev_scripts()[input_index].clone();
 
     populate_taproot_input_witness_default(
-        context,
         tx.tx_mut(),
         prev_outs,
         input_index,

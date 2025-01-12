@@ -1,19 +1,21 @@
 use std::collections::HashMap;
 
 use bitcoin::{
-    key::Secp256k1,
     taproot::{TaprootBuilder, TaprootSpendInfo},
     Address, Network, ScriptBuf, TxIn, XOnlyPublicKey,
 };
 use bitcoin_script::script;
+use secp256k1::SECP256K1;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     graphs::peg_out::CommitmentMessageId,
-    superblock::{SUPERBLOCK_HASH_MESSAGE_LENGTH, SUPERBLOCK_MESSAGE_LENGTH}
+    superblock::{SUPERBLOCK_HASH_MESSAGE_LENGTH, SUPERBLOCK_MESSAGE_LENGTH},
 };
 
-use bitvm::signatures::signing_winternitz::{winternitz_message_checksig_verify, WinternitzPublicKey};
+use bitvm::signatures::signing_winternitz::{
+    winternitz_message_checksig_verify, WinternitzPublicKey,
+};
 
 use super::{
     super::{
@@ -128,7 +130,7 @@ impl TaprootConnector for Connector1 {
             .expect("Unable to add leaf 1")
             .add_leaf(1, self.generate_taproot_leaf_2_script())
             .expect("Unable to add leaf 2")
-            .finalize(&Secp256k1::new(), self.n_of_n_taproot_public_key)
+            .finalize(SECP256K1, self.n_of_n_taproot_public_key)
             .expect("Unable to finalize taproot")
     }
 

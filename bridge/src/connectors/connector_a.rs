@@ -1,8 +1,8 @@
 use bitcoin::{
-    key::Secp256k1,
     taproot::{TaprootBuilder, TaprootSpendInfo},
     Address, Network, ScriptBuf, TxIn, XOnlyPublicKey,
 };
+use secp256k1::SECP256K1;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -66,7 +66,7 @@ impl TaprootConnector for ConnectorA {
             .expect("Unable to add leaf 0")
             .add_leaf(1, self.generate_taproot_leaf_1_script())
             .expect("Unable to add leaf 1")
-            .finalize(&Secp256k1::new(), self.n_of_n_taproot_public_key)
+            .finalize(SECP256K1, self.n_of_n_taproot_public_key)
             .expect("Unable to finalize taproot")
     }
 

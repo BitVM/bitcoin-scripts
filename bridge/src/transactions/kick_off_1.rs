@@ -123,7 +123,6 @@ impl KickOff1Transaction {
 
         // get schnorr signature
         let schnorr_signature = generate_taproot_leaf_schnorr_signature(
-            context,
             self.tx_mut(),
             prev_outs,
             input_index,

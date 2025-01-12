@@ -38,27 +38,17 @@ pub struct AssertFinalTransaction {
 }
 
 impl PreSignedTransaction for AssertFinalTransaction {
-    fn tx(&self) -> &Transaction {
-        &self.tx
-    }
+    fn tx(&self) -> &Transaction { &self.tx }
 
-    fn tx_mut(&mut self) -> &mut Transaction {
-        &mut self.tx
-    }
+    fn tx_mut(&mut self) -> &mut Transaction { &mut self.tx }
 
-    fn prev_outs(&self) -> &Vec<TxOut> {
-        &self.prev_outs
-    }
+    fn prev_outs(&self) -> &Vec<TxOut> { &self.prev_outs }
 
-    fn prev_scripts(&self) -> &Vec<ScriptBuf> {
-        &self.prev_scripts
-    }
+    fn prev_scripts(&self) -> &Vec<ScriptBuf> { &self.prev_scripts }
 }
 
 impl PreSignedMusig2Transaction for AssertFinalTransaction {
-    fn musig2_nonces(&self) -> &HashMap<usize, HashMap<PublicKey, PubNonce>> {
-        &self.musig2_nonces
-    }
+    fn musig2_nonces(&self) -> &HashMap<usize, HashMap<PublicKey, PubNonce>> { &self.musig2_nonces }
     fn musig2_nonces_mut(&mut self) -> &mut HashMap<usize, HashMap<PublicKey, PubNonce>> {
         &mut self.musig2_nonces
     }
@@ -78,9 +68,7 @@ impl PreSignedMusig2Transaction for AssertFinalTransaction {
     ) -> &mut HashMap<usize, HashMap<PublicKey, PartialSignature>> {
         &mut self.musig2_signatures
     }
-    fn verifier_inputs(&self) -> Vec<usize> {
-        vec![0]
-    }
+    fn verifier_inputs(&self) -> Vec<usize> { vec![0] }
 }
 
 impl AssertFinalTransaction {
@@ -217,7 +205,6 @@ impl AssertFinalTransaction {
         for input_index in input_indexes {
             pre_sign_p2wsh_input(
                 self,
-                context,
                 input_index,
                 EcdsaSighashType::All,
                 &vec![&context.operator_keypair],
@@ -253,7 +240,5 @@ impl AssertFinalTransaction {
 }
 
 impl BaseTransaction for AssertFinalTransaction {
-    fn finalize(&self) -> Transaction {
-        self.tx.clone()
-    }
+    fn finalize(&self) -> Transaction { self.tx.clone() }
 }

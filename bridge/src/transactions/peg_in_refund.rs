@@ -98,7 +98,6 @@ impl PegInRefundTransaction {
     fn sign_input_0(&mut self, context: &DepositorContext, connector_z: &ConnectorZ) {
         pre_sign_taproot_input_default(
             self,
-            context,
             0,
             TapSighashType::All,
             connector_z.generate_taproot_spend_info(),

@@ -91,7 +91,6 @@ impl PegOutTransaction {
         let input_index = 0;
         pre_sign_p2wsh_input(
             self,
-            context,
             input_index,
             EcdsaSighashType::All,
             &vec![&context.operator_keypair],

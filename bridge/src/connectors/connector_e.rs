@@ -3,13 +3,15 @@ use super::{
     base::*,
 };
 use crate::graphs::peg_out::CommitmentMessageId;
-use bitvm::signatures::signing_winternitz::{winternitz_message_checksig_verify, WinternitzPublicKey};
 use bitcoin::{
-    key::Secp256k1,
     taproot::{TaprootBuilder, TaprootSpendInfo},
     Address, Network, PublicKey, ScriptBuf, TxIn,
 };
 use bitcoin_script::script;
+use bitvm::signatures::signing_winternitz::{
+    winternitz_message_checksig_verify, WinternitzPublicKey,
+};
+use secp256k1::SECP256K1;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -70,7 +72,7 @@ impl TaprootConnector for ConnectorE {
         TaprootBuilder::new()
             .add_leaf(0, self.generate_taproot_leaf_script(0))
             .expect("Unable to add leaf 0")
-            .finalize(&Secp256k1::new(), self.operator_public_key.into())
+            .finalize(SECP256K1, self.operator_public_key.into())
             .expect("Unable to finalize taproot")
     }
 

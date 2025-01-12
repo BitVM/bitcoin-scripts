@@ -135,5 +135,5 @@ impl KeysCommand {
     }
 }
 fn pubkey_of(private_key: &str) -> PublicKey {
-    generate_keys_from_secret(Network::Bitcoin, private_key).2
+    generate_keys_from_secret(Network::Bitcoin, private_key).1
 }

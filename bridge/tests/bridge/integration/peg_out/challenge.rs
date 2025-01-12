@@ -87,7 +87,6 @@ async fn test_challenge_success() {
         challenge_input_amount,
     );
     challenge.add_inputs_and_output(
-        &config.depositor_context,
         &vec![challenge_crowdfunding_input],
         &config.depositor_context.depositor_keypair,
         generate_pay_to_pubkey_script(&config.depositor_context.depositor_public_key),

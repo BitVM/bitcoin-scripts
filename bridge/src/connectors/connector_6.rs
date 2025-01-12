@@ -3,20 +3,20 @@ use std::collections::HashMap;
 use crate::{
     constants::{DESTINATION_NETWORK_TXID_LENGTH, SOURCE_NETWORK_TXID_LENGTH},
     graphs::peg_out::CommitmentMessageId,
-    transactions::base::Input
+    transactions::base::Input,
 };
 
 use bitvm::{
     signatures::signing_winternitz::{winternitz_message_checksig_verify, WinternitzPublicKey},
-    treepp::script
+    treepp::script,
 };
 
 use bitcoin::{
-    key::Secp256k1,
     taproot::{TaprootBuilder, TaprootSpendInfo},
     Address, Network, ScriptBuf, TxIn, XOnlyPublicKey,
 };
 
+use secp256k1::SECP256K1;
 use serde::{Deserialize, Serialize};
 
 use super::base::{generate_default_tx_in, TaprootConnector};
@@ -76,7 +76,7 @@ impl TaprootConnector for Connector6 {
         TaprootBuilder::new()
             .add_leaf(0, self.generate_taproot_leaf_0_script())
             .expect("Unable to add leaf 0")
-            .finalize(&Secp256k1::new(), self.operator_taproot_public_key) // TODO: should be operator key?
+            .finalize(SECP256K1, self.operator_taproot_public_key) // TODO: should be operator key?
             .expect("Unable to finalize taproot")
     }
 

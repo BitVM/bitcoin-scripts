@@ -39,9 +39,9 @@ impl ClientCommand {
         let config = keys_command.read_config().expect("Failed to read config");
 
         let n_of_n_public_keys = common_args.verifiers.unwrap_or_else(|| {
-            let (_, _, verifier_0_public_key) =
+            let (_, verifier_0_public_key) =
                 generate_keys_from_secret(Network::Bitcoin, VERIFIER_0_SECRET);
-            let (_, _, verifier_1_public_key) =
+            let (_, verifier_1_public_key) =
                 generate_keys_from_secret(Network::Bitcoin, VERIFIER_1_SECRET);
             vec![verifier_0_public_key, verifier_1_public_key]
         });

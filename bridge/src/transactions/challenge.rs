@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use super::{
     super::{
         connectors::{base::*, connector_a::ConnectorA},
-        contexts::{base::BaseContext, operator::OperatorContext},
+        contexts::operator::OperatorContext,
         graphs::base::FEE_AMOUNT,
         scripts::*,
     },
@@ -101,7 +101,6 @@ impl ChallengeTransaction {
     fn sign_input_0(&mut self, context: &OperatorContext, connector_a: &ConnectorA) {
         pre_sign_taproot_input_default(
             self,
-            context,
             0,
             TapSighashType::SinglePlusAnyoneCanPay,
             connector_a.generate_taproot_spend_info(),
@@ -112,7 +111,6 @@ impl ChallengeTransaction {
     // allows for aggregating multiple inputs and one refund output
     pub fn add_inputs_and_output(
         &mut self,
-        context: &dyn BaseContext,
         inputs: &Vec<InputWithScript>,
         keypair: &Keypair,
         output_script_pubkey: ScriptBuf,
@@ -153,7 +151,6 @@ impl ChallengeTransaction {
 
             // add witness
             populate_p2wsh_witness(
-                context,
                 &mut self.tx,
                 input_index,
                 sighash_type,

@@ -4,8 +4,8 @@ use bitcoin::{Network, PublicKey};
 
 use bitvm::{
     chunker::assigner::BridgeAssigner,
-    signatures::winternitz::Parameters,
     signatures::signing_winternitz::{WinternitzPublicKey, WinternitzSecret},
+    signatures::winternitz::Parameters,
 };
 
 use bridge::{
@@ -22,8 +22,8 @@ use bridge::{
         START_TIME_MESSAGE_LENGTH,
     },
     contexts::{
-        base::generate_keys_from_secret, depositor::DepositorContext,
-        operator::OperatorContext, verifier::VerifierContext, withdrawer::WithdrawerContext,
+        base::generate_keys_from_secret, depositor::DepositorContext, operator::OperatorContext,
+        verifier::VerifierContext, withdrawer::WithdrawerContext,
     },
     graphs::{
         base::{
@@ -73,10 +73,8 @@ pub async fn setup_test() -> SetupConfig {
 
     let commitment_secrets = get_test_commitment_secrets();
 
-    let (_, _, verifier_0_public_key) =
-        generate_keys_from_secret(source_network, VERIFIER_0_SECRET);
-    let (_, _, verifier_1_public_key) =
-        generate_keys_from_secret(source_network, VERIFIER_1_SECRET);
+    let (_, verifier_0_public_key) = generate_keys_from_secret(source_network, VERIFIER_0_SECRET);
+    let (_, verifier_1_public_key) = generate_keys_from_secret(source_network, VERIFIER_1_SECRET);
     let mut n_of_n_public_keys: Vec<PublicKey> = Vec::new();
     n_of_n_public_keys.push(verifier_0_public_key);
     n_of_n_public_keys.push(verifier_1_public_key);

@@ -142,7 +142,6 @@ impl PegInConfirmTransaction {
     fn generate_and_push_depositor_signature_input_0(&mut self, context: &DepositorContext) {
         let input_index = 0;
         let schnorr_signature = generate_taproot_leaf_schnorr_signature(
-            context,
             &mut self.tx,
             &self.prev_outs,
             input_index,

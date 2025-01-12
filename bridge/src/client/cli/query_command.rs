@@ -30,9 +30,9 @@ impl QueryCommand {
         destination_network: DestinationNetwork,
         path_prefix: Option<&str>,
     ) -> Self {
-        let (_, _, verifier_0_public_key) =
+        let (_, verifier_0_public_key) =
             generate_keys_from_secret(Network::Bitcoin, VERIFIER_0_SECRET);
-        let (_, _, verifier_1_public_key) =
+        let (_, verifier_1_public_key) =
             generate_keys_from_secret(Network::Bitcoin, VERIFIER_1_SECRET);
 
         let n_of_n_public_keys: Vec<PublicKey> = vec![verifier_0_public_key, verifier_1_public_key];

@@ -23,7 +23,7 @@ use crate::{
         peg_in::{PegInDepositorStatus, PegInVerifierStatus},
         peg_out::{CommitmentMessageId, PegOutOperatorStatus},
     },
-    scripts::generate_pay_to_pubkey_script_address
+    scripts::generate_pay_to_pubkey_script_address,
 };
 
 use bitvm::signatures::signing_winternitz::WinternitzSecret;
@@ -202,21 +202,13 @@ impl BitVMClient {
         }
     }
 
-    pub fn get_data(&self) -> &BitVMClientPublicData {
-        &self.data
-    }
+    pub fn get_data(&self) -> &BitVMClientPublicData { &self.data }
 
-    pub async fn sync(&mut self) {
-        self.read().await;
-    }
+    pub async fn sync(&mut self) { self.read().await; }
 
-    pub async fn sync_l2(&mut self) {
-        self.read_from_l2().await;
-    }
+    pub async fn sync_l2(&mut self) { self.read_from_l2().await; }
 
-    pub async fn flush(&mut self) {
-        self.save().await;
-    }
+    pub async fn flush(&mut self) { self.save().await; }
 
     /*
     File syncing flow with data store
@@ -1102,7 +1094,6 @@ impl BitVMClient {
                 .unwrap()
                 .challenge(
                     &self.esplora,
-                    self.depositor_context.as_ref().unwrap(),
                     crowdfundng_inputs,
                     &self.depositor_context.as_ref().unwrap().depositor_keypair,
                     output_script_pubkey,
@@ -1113,7 +1104,6 @@ impl BitVMClient {
                 .unwrap()
                 .challenge(
                     &self.esplora,
-                    self.operator_context.as_ref().unwrap(),
                     crowdfundng_inputs,
                     &self.operator_context.as_ref().unwrap().operator_keypair,
                     output_script_pubkey,
@@ -1124,7 +1114,6 @@ impl BitVMClient {
                 .unwrap()
                 .challenge(
                     &self.esplora,
-                    self.verifier_context.as_ref().unwrap(),
                     crowdfundng_inputs,
                     &self.verifier_context.as_ref().unwrap().verifier_keypair,
                     output_script_pubkey,
@@ -1135,7 +1124,6 @@ impl BitVMClient {
                 .unwrap()
                 .challenge(
                     &self.esplora,
-                    self.withdrawer_context.as_ref().unwrap(),
                     crowdfundng_inputs,
                     &self.withdrawer_context.as_ref().unwrap().withdrawer_keypair,
                     output_script_pubkey,

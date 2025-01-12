@@ -1748,6 +1748,7 @@ dependencies = [
  "openssh-sftp-client",
  "rand",
  "regex",
+ "secp256k1",
  "serde",
  "serde_json",
  "serial_test",

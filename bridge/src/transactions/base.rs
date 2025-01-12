@@ -168,11 +168,12 @@ mod tests {
     use bitcoin::{
         key::{
             constants::{SCHNORR_SIGNATURE_SIZE, SECRET_KEY_SIZE},
-            Keypair, Secp256k1,
+            Keypair,
         },
         PublicKey, Txid,
     };
     use musig2::{secp256k1::schnorr::Signature, PubNonce};
+    use secp256k1::SECP256K1;
 
     use crate::{
         contexts::base::generate_keys_from_secret,
@@ -194,7 +195,7 @@ mod tests {
         let mut keypairs: Vec<Keypair> = Vec::new();
         let mut pubkeys: Vec<PublicKey> = Vec::new();
         for signer in 0..SIGNERS {
-            let (_, keypair, pubkey) = generate_keys_from_secret(
+            let (keypair, pubkey) = generate_keys_from_secret(
                 bitcoin::Network::Bitcoin,
                 &hex::encode([(signer + 1) as u8; SECRET_KEY_SIZE]),
             );
@@ -213,7 +214,7 @@ mod tests {
 
                 nonces.insert(pubkeys[signer], secret_nonce.public_nonce());
 
-                let nonce_signature = Secp256k1::new().sign_schnorr(
+                let nonce_signature = SECP256K1.sign_schnorr(
                     &get_nonce_message(&secret_nonce.public_nonce()),
                     &keypairs[signer],
                 );

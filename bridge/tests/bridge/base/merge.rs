@@ -42,7 +42,6 @@ async fn test_merge_add_new_input_and_output() {
     let input_script =
         generate_pay_to_pubkey_script(&config.depositor_context.depositor_public_key);
     source_challenge_tx.add_inputs_and_output(
-        &config.operator_context,
         &vec![InputWithScript {
             outpoint,
             amount: amount * 2,
