@@ -1,0 +1,16 @@
+[package]
+name = "header-chain"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+risc0-zkvm = {version = "1.2.0", default-features = false, features = ["std"]}
+borsh = {version = "1.5.3", features = ["derive"] }
+sha2 =  { version = "0.10.8", default-features = false }
+crypto-bigint = { version = "0.5.5", default-features = false }
+bitcoin = "0.32.5"
+serde = { version = "1.0", default-features = false }
+
+[dev-dependencies]
+hex = "0.4.3"
+hex-literal = "0.4.1"
