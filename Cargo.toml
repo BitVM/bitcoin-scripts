@@ -2,7 +2,8 @@
 resolver = "2"
 members = [
     "bitvm",
-    "bridge"
+    "bridge",
+    "fuzz",
 ]
 
 [workspace.dependencies]
