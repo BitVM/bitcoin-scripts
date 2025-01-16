@@ -18,6 +18,7 @@ ark-ec.workspace = true
 ark-groth16.workspace = true
 ark-serialize.workspace = true
 sha2.workspace = true
+sha1.workspace = true
 bitcoin-script-stack.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true

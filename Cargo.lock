@@ -1660,6 +1660,7 @@ dependencies = [
  "rand_chacha",
  "regex",
  "serde",
+ "sha1",
  "sha2",
  "tqdm",
 ]

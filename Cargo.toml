@@ -51,6 +51,7 @@ ark-relations = { git = "https://github.com/arkworks-rs/snark/" }
 serial_test = "*"
 tqdm = "0.7"
 secp256k1 = { version = "0.29.1", features = ["global-context"]}
+sha1 = "0.10"
 
 [profile.dev]
 opt-level = 3
