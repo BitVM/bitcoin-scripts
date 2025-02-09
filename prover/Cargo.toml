@@ -1,0 +1,26 @@
+[package]
+name = "prover"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+header-chain = { path = "../header-chain" }
+final-spv = { path = "../final-spv" }
+borsh = {version = "1.5.3", features = ["derive"] }
+risc0-zkvm = {version = "1.2.0", default-features = false, features = ["prove"]}
+risc0-zkp = {version = "1.2.0", default-features = false, features = ["prove"]}
+risc0-binfmt = {version = "1.2.0"}
+risc0-circuit-recursion = {version = "1.2.0"}
+sha2 =  { version = "0.10.8", default-features = false }
+blake3 = { version = "1.5.0", default-features = false }
+tempfile = "3.10.1"
+risc0-groth16 = {version="1.2.0", features=["prove"]}
+hex.workspace = true
+crypto-bigint = { git = "https://github.com/risc0/RustCrypto-crypto-bigint", tag = "v0.5.2-risczero.0", default-features = false }
+serde_json = "1.0.108"
+num-bigint = { version="0.4.5", features=["std"] }
+num-traits = "0.2.19"
+
+[dev-dependencies]
+hex-literal = "0.4.1"
+bitcoin = "0.32.5"
