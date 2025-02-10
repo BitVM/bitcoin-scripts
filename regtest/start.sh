@@ -19,8 +19,8 @@ if [ -n "$data_path" ]; then
   fi
 
   pid=`docker ps | grep blockstream/esplora | awk '{print $1}'`
-  createwallet_command="/srv/explorer/bitcoin/bin/bitcoin-cli -conf=/data/.bitcoin.conf -datadir=/data/bitcoin createwallet default"
-  docker exec $pid /bin/bash -c "$createwallet_command"
+  # createwallet_command="/srv/explorer/bitcoin/bin/bitcoin-cli -conf=/data/.bitcoin.conf -datadir=/data/bitcoin createwallet default"
+  # docker exec $pid /bin/bash -c "$createwallet_command"
 
   pid=`ps | grep "[b]lock-generator" | awk '{print $1}'`
   echo "Start up block miner ..."

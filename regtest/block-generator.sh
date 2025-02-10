@@ -9,9 +9,9 @@ fi
 pid=`docker ps | grep blockstream/esplora | awk '{print $1}'`
 echo "Targeting container $pid ..."
 
-echo "Loading default wallet ..."
-load_wallet_command="/srv/explorer/bitcoin/bin/bitcoin-cli -conf=/data/.bitcoin.conf -datadir=/data/bitcoin loadwallet default"
-docker exec $pid /bin/bash -c "$load_wallet_command"
+# echo "Loading default wallet ..."
+# load_wallet_command="/srv/explorer/bitcoin/bin/bitcoin-cli -conf=/data/.bitcoin.conf -datadir=/data/bitcoin loadwallet default"
+# docker exec $pid /bin/bash -c "$load_wallet_command"
 
 set -e
 
