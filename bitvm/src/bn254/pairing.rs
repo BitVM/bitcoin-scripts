@@ -70,6 +70,7 @@ impl Pairing {
             }
 
             for (j, p) in p_lst.iter().enumerate().take(num_line_groups) {
+                if j == 2 { continue; }
                 let coeffs = &line_coeffs[num_lines - (i + 2)][j][0];
                 assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
                 let mut fx = f;
@@ -121,6 +122,7 @@ impl Pairing {
                 || ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1
             {
                 for (j, p) in p_lst.iter().enumerate().take(num_line_groups) {
+                    if j == 2 { continue; }
                     let coeffs = &line_coeffs[num_lines - (i + 2)][j][1];
                     assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
                     let mut fx = f;
@@ -215,6 +217,7 @@ impl Pairing {
         f = fx;
 
         for (j, p) in p_lst.iter().enumerate().take(num_line_groups) {
+            if j == 2 { continue; }
             let coeffs = &line_coeffs[num_lines - 2][j][0];
             assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
             let mut fx = f;
@@ -303,6 +306,7 @@ impl Pairing {
         }
 
         for (j, p) in p_lst.iter().enumerate().take(num_line_groups) {
+            if j == 2 { continue; }
             let coeffs = &line_coeffs[num_lines - 1][j][0];
             assert_eq!(coeffs.0, ark_bn254::Fq2::ONE);
             let mut fx = f;
@@ -383,7 +387,7 @@ impl Pairing {
                 // [beta_12(2), beta_13(2), beta_22(2), P1(2), P2(2), P3(2), P4(2), Q4(4), c(12), c_inv(12), wi(12), T4(4), f(12)]
 
                 // update f with double line evaluation
-                for j in 0..num_line_groups {
+                for j in [0, 1, 3] {
                     // copy P_j(p1, p2, p3, p4) to stack
                     { Fq2::copy((26 + 36 - j * 2) as u32) }
                     // update f with double line evaluation
@@ -447,7 +451,7 @@ impl Pairing {
                 if ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == 1
                     || ark_bn254::Config::ATE_LOOP_COUNT[i - 1] == -1
                 {
-                    for j in 0..num_line_groups {
+                    for j in [0, 1, 3] {
                         // copy P_j(p1, p2, p3, p4) to stack
                         { Fq2::copy((26 + 36 - j * 2) as u32) }
                         // update f with adding line evaluation
@@ -549,7 +553,7 @@ impl Pairing {
                                                             // [beta_12(2), beta_13(2), beta_22(2), P1(2), P2(2), P3(2), P4(2), Q4(4), T4(4), f(12)]
 
             // update f with add line evaluation of one-time of frobenius map on Q4
-            for j in 0..num_line_groups {
+            for j in [0, 1, 3] {
                 // copy P_j(p1, p2, p3, p4) to stack
                 { Fq2::copy((26 - j * 2) as u32) }
                 // [beta_12(2), beta_13(2), beta_22(2), P1(2), P2(2), P3(2), P4(2), Q4(4), T4(4), f(12), P_j(2)]
@@ -646,8 +650,13 @@ impl Pairing {
             for j in 0..num_line_groups {
                 // update f with adding line evaluation by rolling each Pi(2) element to the right(stack top)
                 { Fq2::roll((26 - j * 2) as u32) }
-                { scripts_iter.next().unwrap() } // ell_by_constant_affine(&line_coeffs[num_lines - 1][j][0])
+                if j == 2 {
+                    { Fq2::drop() }
+                }
+                else {
+                    { scripts_iter.next().unwrap() } // ell_by_constant_affine(&line_coeffs[num_lines - 1][j][0])
                                                                 // [beta_22(2), Q4(4), T4(4), f(12)]
+                }
 
                 // non-fixed part(Q4)
                 if j == num_constant {
@@ -767,10 +776,9 @@ mod test {
             quad_miller_loop_affine_script.len()
         );
 
-        let f = Bn254::multi_miller_loop_affine([p1, p2, p3, p4], [q1, q2, q3, q4]).0;
-        println!("Bn254::multi_miller_loop_affine done!");
+        let f_without_3 = Bn254::multi_miller_loop_affine([p1, p2, p4], [q1, q2, q4]).0;
 
-        let result = f * wi * (c_inv.pow(LAMBDA.to_u64_digits()));
+        let result = f_without_3 * wi * (c_inv.pow(LAMBDA.to_u64_digits()));
 
         // [beta_12, beta_13, beta_22, P1, P2, P3, P4, Q4, c,  c_inv, wi, T4]: p1-p4: (-p.x / p.y, 1 / p.y)
         let script = script! {

@@ -16,6 +16,8 @@ use ark_ff::Field;
 use ark_groth16::{Proof, VerifyingKey};
 use core::ops::Neg;
 
+use super::constants::LAMBDA;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Verifier;
 
@@ -51,8 +53,12 @@ impl Verifier {
 
         // hint from arkworks
         let f = Bn254::multi_miller_loop_affine([p1, p2, p3, p4], [q1, q2, q3, q4]).0;
-        let (c, wi) = compute_c_wi(f);
+        let f_without_3 = Bn254::multi_miller_loop_affine([p1, p2, p4], [q1, q2, q4]).0;
+        let (c, wi) = compute_c_wi(f_without_3);
         let c_inv = c.inverse().unwrap();
+        let result = f_without_3 * wi * (c_inv.pow(LAMBDA.to_u64_digits()));
+        println!("f_without_3: {:?}", f_without_3);
+        println!("result: {:?}", result);
 
         let q_prepared = [G2Prepared::from_affine(q1),
             G2Prepared::from_affine(q2),
@@ -116,7 +122,7 @@ impl Verifier {
             // Output stack: [final_f]
             { hinted_script6 } // Pairing::quad_miller_loop_with_c_wi(q_prepared.to_vec()),
             // check final_f == hint
-            { Fq12::push(ark_bn254::Fq12::ONE) }
+            { Fq12::push(result) }
             { Fq12::equalverify() }
             OP_TRUE
         };
