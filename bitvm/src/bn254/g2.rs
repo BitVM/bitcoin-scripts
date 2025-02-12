@@ -147,9 +147,9 @@ impl G2Affine {
         ])
         .unwrap();
     
-        let mut qq = q.clone();
+        let mut qq = q;
         let (beta22_mul, hints) = Fq2::hinted_mul(2, q.x, 0, beta_22);
-        qq.x = qq.x * beta_22;
+        qq.x *= beta_22;
 
         let scr = script!{
             // [q.x, q.y]
@@ -191,14 +191,14 @@ impl G2Affine {
         ])
         .unwrap();
 
-        let mut qq = q.clone();
+        let mut qq = q;
         qq.x.conjugate_in_place();
         let (beta12_mul_scr, hint_beta12_mul) = Fq2::hinted_mul(2, qq.x, 0, beta_12);
-        qq.x = qq.x * beta_12;
+        qq.x *= beta_12;
 
         qq.y.conjugate_in_place();
         let (beta13_mul_scr, hint_beta13_mul) = Fq2::hinted_mul(2, qq.y, 0, beta_13);
-        qq.y = qq.y * beta_13;
+        qq.y *= beta_13;
 
         let mut frob_hint: Vec<Hint> = vec![];
         for hint in hint_beta13_mul {
@@ -262,12 +262,10 @@ pub fn hinted_ell_by_constant_affine_and_sparse_mul(
          // [f]
     };
 
-    hints.extend_from_slice(&vec![
-        Hint::Fq(constant.1.c0),
+    hints.extend_from_slice(&[Hint::Fq(constant.1.c0),
         Hint::Fq(constant.1.c1),
         Hint::Fq(constant.2.c0),
-        Hint::Fq(constant.2.c1),
-    ]);
+        Hint::Fq(constant.2.c1)]);
 
     hints.extend(hint_ell);
     hints.extend(hint5);
@@ -450,6 +448,60 @@ pub fn hinted_affine_add_line(
     (script, hints)
 }
 
+
+pub fn hinted_affine_add_line_empty_elements(tx: ark_bn254::Fq2, qx: ark_bn254::Fq2, c3: ark_bn254::Fq2, c4: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
+    let mut hints = Vec::new();
+    let (hsc, hts) = Fq2::hinted_square(c3);
+    let (hinted_script1, hint1) = Fq2::hinted_mul(4, c3, 0, c3.square()-tx-qx);
+
+    let script_lines = vec! [
+        // [alpha, bias, tx, qx]
+        Fq2::toaltstack(),
+        Fq2::toaltstack(),
+        Fq2::roll(2),
+        Fq2::fromaltstack(),
+        Fq2::fromaltstack(),
+        // [bias, alpha, tx, qx]
+
+        // [T.x, Q.x]
+        Fq2::neg(0),
+        // [T.x, -Q.x]
+        Fq2::roll(2),
+        // [-Q.x, T.x]
+        Fq2::neg(0),
+        // [-T.x - Q.x]
+        Fq2::add(2, 0),
+        // [-T.x - Q.x]
+        Fq2::roll(2),
+        Fq2::copy(0),
+        hsc,
+        // [-T.x - Q.x, alpha, alpha^2]
+        // calculate x' = alpha^2 - T.x - Q.x
+        Fq2::add(4, 0),
+        // [alpha, x']
+        Fq2::copy(0),
+        // [alpha, x', x']
+        hinted_script1,
+        // [x', alpha * x']
+        Fq2::neg(0),
+        // [x', -alpha * x']
+        // fq2_push_not_montgomery(c4),
+        // [x', -alpha * x', -bias]
+        // compute y' = -bias - alpha * x'
+        Fq2::add(4, 0),
+        // [x', y']
+    ];
+
+    let mut script = script!{};
+    for script_line in script_lines {
+        script = script.push_script(script_line.compile());
+    }
+    hints.extend(hts);
+    hints.extend(hint1);
+
+    (script, hints)
+}
+
 /// double a point T:
 ///     x' = alpha^2 - 2 * T.x
 ///     y' = -bias - alpha* x'
@@ -489,6 +541,45 @@ pub fn hinted_affine_double_line(
 
     (script, hints)
 }
+
+pub fn hinted_affine_double_line_keep_elements(tx: ark_bn254::Fq2, c3: ark_bn254::Fq2, c4: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
+    let mut hints = Vec::new();
+
+    let (hsc, hts) = Fq2::hinted_square(c3);
+    let (hinted_script1, hint1) = Fq2::hinted_mul(4, c3, 0, c3.square()-tx-tx);
+
+    let scr = script!(
+        // [alpha, bias, tx]
+        {Fq2::toaltstack()}
+        {Fq2::roll(2)}
+        {Fq2::fromaltstack()}
+        // [bias, alpha, tx]
+
+        {Fq2::double(0)}
+        {Fq2::neg(0)}
+        // [alpha, - 2 * T.x]
+        {Fq2::roll(2)}
+        {Fq2::copy(0)}
+        {hsc}
+        // fq2_push_not_montgomery(c3.square()),
+        // [- 2 * T.x, alpha, alpha^2]
+        {Fq2::add(4, 0)}
+        {Fq2::copy(0)}
+        // [alpha, x', x']
+        {hinted_script1}
+        {Fq2::neg(0)}
+        // [x', -alpha * x']
+
+        {Fq2::add(4, 0)}
+        // [x', y']
+    );
+
+    hints.extend(hts);
+    hints.extend(hint1);
+
+    (scr, hints)
+}
+
 
 /// check whether a tuple coefficient (alpha, -bias) of a tangent line is satisfied with expected point T (affine)
 /// two aspects:
@@ -554,6 +645,54 @@ pub fn hinted_check_tangent_line(
     (script, hints)
 }
 
+pub fn hinted_check_tangent_line_keep_elements(
+    t: ark_bn254::G2Affine,
+    c3: ark_bn254::Fq2,
+    c4: ark_bn254::Fq2,
+) -> (Script, Vec<Hint>) {
+    let mut hints = Vec::new();
+
+    let (hinted_script3, hint3) = hinted_check_line_through_point_keep_elements(t.x, c3, c4);
+    let (hinted_script1, hint1) = Fq2::hinted_mul(2, t.y.double(), 0, c3);
+    let (hinted_script2, hint2) = Fq2::hinted_square(t.x);
+
+
+    // [a, b, x, y]
+    let scr = script!(
+        {hinted_script3}
+        // alpha * (2 * T.y) = 3 * T.x^2
+        {Fq2::copy(0)}
+        {Fq2::double(0)}
+        {// [a, b, x, y, 2y]
+        Fq2::copy(8)}
+        {// [a, b, x, y, 2y, a]
+        hinted_script1}
+        {// [T.x, T.y, alpha * (2 * T.y)]
+        Fq2::copy(4)}
+        {hinted_script2}
+        {Fq2::copy(0)}
+        {Fq2::double(0)}
+        {Fq2::add(2, 0)}
+        {// [T.x, T.y, alpha * (2 * T.y), 3 * T.x^2]
+        Fq2::neg(0)}
+        {Fq2::add(2, 0)}
+        {Fq2::push_zero()}
+        {Fq2::equalverify()}
+        // [T.x, T.y]
+
+        // check: T.y - alpha * T.x - bias = 0
+        // hinted_script3}
+        // []
+    );
+
+    hints.extend(hint3);
+    hints.extend(hint1);
+    hints.extend(hint2);
+
+    (scr, hints)
+}
+
+
 /// check line through one point, that is:
 ///     y - alpha * x - bias = 0
 ///
@@ -603,6 +742,74 @@ pub fn hinted_check_line_through_point(
 
     (script, hints)
 }
+
+pub fn hinted_check_line_through_point_empty_elements(x: ark_bn254::Fq2, c3: ark_bn254::Fq2, _c4: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
+    let mut hints: Vec<Hint> = Vec::new();
+    
+    let (hinted_script1, hint1) = Fq2::hinted_mul(2, x,0, c3);
+
+    let script_lines = vec![
+        // [alpha, bias, x, y ]
+        Fq2::roll(2),
+        // [alpha, bias, y, x ]
+        Fq2::roll(6),
+        hinted_script1,
+        // [bias, y, alpha * x]
+        Fq2::neg(0),
+        // [bias, y, -alpha * x]
+        Fq2::add(2, 0),
+        // [bias, y - alpha * x]
+        Fq2::add(2, 0),
+        // [y - alpha * x - bias]
+
+        Fq2::push_zero(),
+        // [y - alpha * x - bias, 0]
+        Fq2::equalverify(),
+    ];
+
+    let mut script = script!{};
+    for script_line in script_lines {
+        script = script.push_script(script_line.compile());
+    }
+    hints.extend(hint1);
+
+    (script, hints)
+}
+
+
+pub(crate) fn hinted_check_line_through_point_keep_elements(x: ark_bn254::Fq2, c3: ark_bn254::Fq2, _c4: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
+    let mut hints: Vec<Hint> = Vec::new();
+    
+    let (hinted_script1, hint1) = Fq2::hinted_mul(2, x,0, c3);
+
+    let scr = script!(
+        // [alpha, bias, x, y ]
+        {Fq2::copy(2)}
+        // [alpha, bias, x, y, x ]
+        {Fq2::copy(8)}
+        // [alpha, bias, x, y, x, alpha]
+        {hinted_script1}
+        // [alpha, bias, x, y, alpha * x]
+        {Fq2::neg(0)}
+        // [alpha, bias, x, y, -alpha * x]
+        {Fq2::copy(2)}
+        {Fq2::add(2, 0)}
+        // [alpha, bias, x, y, y - alpha * x]
+        {Fq2::copy(6)}
+        // [alpha, bias, x, y, y - alpha * x, bias]
+        {Fq2::add(2, 0)}
+        // [alpha, bias, x, y, y - alpha * x - bias]
+        {Fq2::push_zero()}
+        // [y - alpha * x - bias, 0]
+        {Fq2::equalverify()}
+    );
+
+    hints.extend(hint1);
+
+    (scr, hints)
+}
+
+
 
 /// check whether a tuple coefficient (alpha, -bias) of a chord line is satisfied with expected points T and Q (both are affine cooordinates)
 /// two aspects:
@@ -999,6 +1206,48 @@ mod test {
             OP_TRUE
         };
         let exec_result = execute_script(script);
+        assert!(exec_result.success);
+        println!(
+            "hinted_check_line: {} @ {} stack",
+            hinted_check_line.len(),
+            exec_result.stats.max_nb_stack_items
+        );
+    }
+
+    #[test]
+    fn test_hinted_check_tangent_line_keep_elements() {
+        let mut prng = ChaCha20Rng::seed_from_u64(0);
+        let t = ark_bn254::G2Affine::rand(&mut prng);
+        let two_inv = ark_bn254::Fq::one().double().inverse().unwrap();
+        let three_div_two = (ark_bn254::Fq::one().double() + ark_bn254::Fq::one()) * two_inv;
+        let mut alpha = t.x.square();
+        alpha /= t.y;
+        alpha.mul_assign_by_fp(&three_div_two);
+        // -bias
+        let bias_minus = alpha * t.x - t.y;
+        assert_eq!(alpha * t.x - t.y, bias_minus);
+
+        let (hinted_check_line, hints) = hinted_check_tangent_line_keep_elements(t, alpha, bias_minus);
+
+        let script = script! {
+            for hint in hints {
+                { hint.push() }
+            }
+            { Fq2::push(alpha) }
+            { Fq2::push(bias_minus) }
+            { Fq2::push(t.x) }
+            { Fq2::push(t.y) }
+            { hinted_check_line.clone() }
+            for v in vec![t.y, t.x, bias_minus, alpha] {
+                {Fq2::push(v)}
+                {Fq2::equalverify()}
+            }
+            OP_TRUE
+        };
+        let exec_result = execute_script(script);
+        for i in 0..exec_result.final_stack.len() {
+            println!("{i:3}: {:?}", exec_result.final_stack.get(i));
+        }
         assert!(exec_result.success);
         println!(
             "hinted_check_line: {} @ {} stack",

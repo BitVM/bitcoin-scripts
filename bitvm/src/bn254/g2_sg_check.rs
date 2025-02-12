@@ -25,7 +25,7 @@ fn split_scalar(window: usize, scalar: u64) -> Vec<Vec<u8>> {
         bits
     }
     let mut scalar_bits: Vec<Vec<u8>> = vec![];
-    u64_to_bits(scalar).chunks(window as usize).for_each(|c| {
+    u64_to_bits(scalar).chunks(window).for_each(|c| {
         scalar_bits.push(c.to_vec());
     });
     scalar_bits
@@ -33,7 +33,7 @@ fn split_scalar(window: usize, scalar: u64) -> Vec<Vec<u8>> {
 
 fn hinted_check_double_and_add(t: ark_bn254::G2Affine, q: ark_bn254::G2Affine, bits: Vec<u8>) -> (Script, Vec<Hint>) {
     let mut hints: Vec<Hint> = vec![];
-    let mut acc = t.clone();
+    let mut acc = t;
     let mut script = script!();
     for bit in bits {
         if bit == 0 {
@@ -255,14 +255,14 @@ fn hinted_mul_by_char_on_q(q: ark_bn254::G2Affine) -> (ark_bn254::G2Affine, Scri
     ])
     .unwrap();
 
-    let mut qq = q.clone();
+    let mut qq = q;
     qq.x.conjugate_in_place();
     let (beta12_mul_scr, hint_beta12_mul) = Fq2::hinted_mul(2, qq.x, 0, beta_12);
-    qq.x = qq.x * beta_12;
+    qq.x *= beta_12;
 
     qq.y.conjugate_in_place();
     let (beta13_mul_scr, hint_beta13_mul) = Fq2::hinted_mul(2, qq.y, 0, beta_13);
-    qq.y = qq.y * beta_13;
+    qq.y *= beta_13;
 
     let mut frob_hint: Vec<Hint> = vec![];
     for hint in hint_beta13_mul {
@@ -346,7 +346,7 @@ pub(crate) fn is_in_g2_subgroup(q: ark_bn254::G2Affine, window: usize) -> Vec<(a
     all_chunks.extend_from_slice(&msm_chunks);
 
     let endo_chunk = g2_chain_endomorphism(msm_res);
-    let endo_res = endo_chunk.0.clone();
+    let endo_res = endo_chunk.0;
     all_chunks.push(endo_chunk);
 
     let last_chunk = {
@@ -480,7 +480,7 @@ mod test {
         let t = ark_bn254::G2Affine::rand(&mut prng);
         let q = ark_bn254::G2Affine::rand(&mut prng);
         let bits = vec![0, 1, 0, 1];
-        let mut acc = t.clone();
+        let mut acc = t;
         for bit in &bits {
             if *bit == 0 {
                 acc = (acc + acc).into_affine();
@@ -532,7 +532,7 @@ mod test {
         let chunks = hinted_msm(scalar, q, window);
         let chunk_hints: Vec<Vec<Hint>> = chunks.iter().map(|c| c.2.clone()).collect();
         let chunk_scripts: Vec<treepp::Script> = chunks.iter().map(|c| c.1.clone()).collect();
-        let chunk_results: Vec<ark_bn254::G2Affine> = chunks.iter().map(|c| c.0.clone()).collect();
+        let chunk_results: Vec<ark_bn254::G2Affine> = chunks.iter().map(|c| c.0).collect();
         
         let expected = (q * ark_bn254::Fr::from(scalar)).into_affine();
         assert_eq!(expected, chunk_results[chunk_results.len()-1]);
@@ -618,7 +618,7 @@ mod test {
         let chunks = is_in_g2_subgroup(q, window);
         let chunk_hints: Vec<Vec<Hint>> = chunks.iter().map(|c| c.2.clone()).collect();
         let chunk_scripts: Vec<treepp::Script> = chunks.iter().map(|c| c.1.clone()).collect();
-        let chunk_results: Vec<ark_bn254::G2Affine> = chunks.iter().map(|c| c.0.clone()).collect();
+        let chunk_results: Vec<ark_bn254::G2Affine> = chunks.iter().map(|c| c.0).collect();
 
         // MSM Chunks
         assert_eq!(num_msm_chunks+2, chunk_results.len());

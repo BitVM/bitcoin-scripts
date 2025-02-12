@@ -115,7 +115,7 @@ pub fn compute_c_wi(f: ark_bn254::Fq12) -> (ark_bn254::Fq12, ark_bn254::Fq12) {
     let f1 = f * wi;
 
     // r-th root of f1, say f2
-    let r_inv = R.modinv(&*H).unwrap();
+    let r_inv = R.modinv(&H).unwrap();
     log_assert_ne!(r_inv, BigUint::one());
     let f2 = f1.pow(r_inv.to_u64_digits());
     log_assert_ne!(f2, ark_bn254::Fq12::ONE);

@@ -685,6 +685,64 @@ pub trait Fp254Impl {
 
         (script, hints)
     }
+
+    #[allow(clippy::too_many_arguments)]
+    fn hinted_mul_lc4(
+        a_depth: u32,
+        a: ark_bn254::Fq,
+        b_depth: u32,
+        b: ark_bn254::Fq,
+        c_depth: u32,
+        c: ark_bn254::Fq,
+        d_depth: u32,
+        d: ark_bn254::Fq,
+
+        e_depth: u32,
+        e: ark_bn254::Fq,
+        f_depth: u32,
+        f: ark_bn254::Fq,
+        g_depth: u32,
+        g: ark_bn254::Fq,
+        h_depth: u32,
+        h: ark_bn254::Fq,
+    ) -> (Script, Vec<Hint>) {
+        assert!(a_depth > b_depth && b_depth > c_depth && c_depth > d_depth && d_depth > e_depth && e_depth > f_depth && f_depth > g_depth && g_depth > h_depth);
+
+        let mut hints = Vec::new();
+
+        let modulus = &Fq::modulus_as_bigint();
+
+        let x1 = BigInt::from_str(&a.to_string()).unwrap();
+        let y1 = BigInt::from_str(&b.to_string()).unwrap();
+        let z1 = BigInt::from_str(&c.to_string()).unwrap();
+        let w1 = BigInt::from_str(&d.to_string()).unwrap();
+
+        let x2 = BigInt::from_str(&e.to_string()).unwrap();
+        let y2 = BigInt::from_str(&f.to_string()).unwrap();
+        let z2 = BigInt::from_str(&g.to_string()).unwrap();
+        let w2 = BigInt::from_str(&h.to_string()).unwrap();
+
+        let q = (x1 * x2 + y1 * y2 + z1 * z2 + w1 * w2) / modulus;
+
+        let script = script! {
+            for _ in 0..Self::N_LIMBS {
+                OP_DEPTH OP_1SUB OP_ROLL // hints
+            }
+            // { fq_push(ark_bn254::Fq::from_str(&q.to_string()).unwrap()) }
+            { Fq::roll(a_depth + 1) }
+            { Fq::roll(b_depth + 2) }
+            { Fq::roll(c_depth + 3) }
+            { Fq::roll(d_depth + 4) }
+            { Fq::roll(e_depth + 5) }
+            { Fq::roll(f_depth + 6) }
+            { Fq::roll(g_depth + 7) }
+            { Fq::roll(h_depth + 8) }
+            { Fq::tmul_lc4() }
+        };
+        hints.push(Hint::BigIntegerTmulLC4(q));
+
+        (script, hints)
+    }
     
     #[allow(clippy::too_many_arguments)]
     fn hinted_mul_lc2_keep_elements(

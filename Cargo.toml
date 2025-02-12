@@ -48,7 +48,7 @@ serde-big-array = "0.5.1"
 num-bigint = { version = "0.4.4", features = ["rand"] }
 ark-std = { version = "0.4.0", default-features = false, features = ["print-trace"] }
 ark-crypto-primitives = { git = "https://github.com/arkworks-rs/crypto-primitives", features = ["snark", "sponge"] }
-ark-relations = { git = "https://github.com/arkworks-rs/snark/" }
+ark-relations = { version = "0.4.0" }
 serial_test = "*"
 tqdm = "0.7"
 secp256k1 = { version = "0.29.1", features = ["global-context"]}
