@@ -17,8 +17,19 @@ jobs:
     runs-on: self-hosted
     steps:
     - uses: actions/checkout@v4
-    - name: Run clippy
-      run: cargo clippy
+    - name: Run clippy (no guests)
+      run: cargo clippy --workspace --exclude header-chain-circuit --exclude final-spv-circuit
+
+  guest:
+    if: github.event.pull_request.draft == false
+    timeout-minutes: 30
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build guests
+      run: |
+        REPR_GUEST_BUILD=1 BITCOIN_NETWORK=mainnet cargo build -p header-chain-circuit --release
+        REPR_GUEST_BUILD=1 BITCOIN_NETWORK=mainnet cargo build -p final-spv-circuit --release
 
   build:
     if: github.event.pull_request.draft == false
