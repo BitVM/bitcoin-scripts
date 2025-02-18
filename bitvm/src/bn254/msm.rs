@@ -210,9 +210,9 @@ pub fn hinted_msm_with_constant_bases_affine(
         msm_bases.clone(),
         window,
     );
-    let msm_chunk_hints: Vec<Hint> = msm_chunks.iter().map(|f| f.2.clone()).flatten().collect();
+    let msm_chunk_hints: Vec<Hint> = msm_chunks.iter().flat_map(|f| f.2.clone()).collect();
     let msm_chunk_scripts: Vec<Script> = msm_chunks.iter().map(|f| f.1.clone()).collect();
-    let msm_chunk_results: Vec<ark_bn254::G1Affine> = msm_chunks.iter().map(|f| f.0.clone()).collect();
+    let msm_chunk_results: Vec<ark_bn254::G1Affine> = msm_chunks.iter().map(|f| f.0).collect();
     hints.extend_from_slice(&msm_chunk_hints);
 
     acc = (acc + msm_acc).into_affine();
@@ -231,6 +231,13 @@ pub fn hinted_msm_with_constant_bases_affine(
     // Gather scripts
     let script = script! {
         for i in 0..msm_chunk_scripts.len() {
+            // G1Acc preimage
+            if i == 0 {
+                {G1Affine::push( ark_bn254::G1Affine::new_unchecked(ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO))}
+            } else {
+                {G1Affine::push(msm_chunk_results[i-1])}
+            }
+
             // Scalar_i: groth16 public inputs bitcommited input irl
             for msm_scalar in &msm_scalars {
                 {Fr::push(*msm_scalar)}

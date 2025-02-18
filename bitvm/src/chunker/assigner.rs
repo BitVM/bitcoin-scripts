@@ -337,7 +337,7 @@ mod tests {
         let witness = (0..times)
             .map(|_| {
                 generate_winternitz_witness(&WinternitzSigningInputs {
-                    message: &vec![0; 20],
+                    message: &[0; 20],
                     signing_key: &bc_secret,
                 })
                 .to_vec()
