@@ -1,5 +1,5 @@
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{AdditiveGroup, BigInteger, Field, MontFp, One, PrimeField};
+use ark_ff::{AdditiveGroup, BigInteger, Field, One, PrimeField};
 use num_bigint::{BigInt, BigUint, Sign};
 use std::cmp::min;
 use std::ops::{AddAssign, Div, Neg, Rem};
@@ -11,6 +11,7 @@ use crate::bn254::utils::Hint;
 use crate::treepp::{script, Script};
 use num_traits::Signed;
 
+use super::fq2::Fq2;
 use super::fr;
 
 pub struct G1Affine;
@@ -207,7 +208,7 @@ impl G1Affine {
         ];
         
         let coeff_bigints: [BigInt; 4] = scalar_decomp_coeffs.map(|x| {
-            BigInt::from_biguint(x.0.then_some(Sign::Plus).unwrap_or(Sign::Minus), x.1)
+            BigInt::from_biguint(if x.0 { Sign::Plus } else { Sign::Minus }, x.1)
         });
 
         let [n11, n12, n21, n22] = coeff_bigints;
@@ -305,9 +306,9 @@ impl G1Affine {
 
     
     fn hinted_scalar_decomposition(k: ark_bn254::Fr) -> (Script, Vec<Hint>) {
-        const LAMBDA: ark_bn254::Fr = MontFp!("21888242871839275217838484774961031246154997185409878258781734729429964517155");
+        let lambda: ark_bn254::Fr = ark_bn254::Fr::from(BigUint::from_str("21888242871839275217838484774961031246154997185409878258781734729429964517155").unwrap());
         let (_, (_, k1)) = Self::calculate_scalar_decomposition(k);
-        let (mul_scr, mul_hints) = Self::hinted_fr_mul_by_constant(k1, &LAMBDA);
+        let (mul_scr, mul_hints) = Self::hinted_fr_mul_by_constant(k1, &lambda);
         let scr = script!{
             // [s0, k0, s1, k1, k]
             {Fr::toaltstack()}
@@ -378,15 +379,11 @@ impl G1Affine {
         window: u32,
         ith_step: u32,
     ) -> (ark_bn254::G1Affine, Script, Vec<Hint>) {
-        let mut tmp_g1acc = g1acc.clone();
+        let mut tmp_g1acc = *g1acc;
         assert_eq!(g16_scalars.len(), g16_bases.len());
 
         let mut loop_scripts = script!();
         let mut loop_hints = vec![];
-        if ith_step != 0 {
-            loop_hints.push(Hint::Fq(g1acc.x));
-            loop_hints.push(Hint::Fq(g1acc.y));
-        }
 
         // Given: g16_bases = [p0, p1]
         // Extend bases to include point endomorphism => [p0, phi(p0)..]
@@ -434,20 +431,7 @@ impl G1Affine {
         // prepare stack order by moving hints from top of stack
         loop_scripts = script!(
             {loop_scripts}
-            for _ in 0..g16_scalars.len() {
-                {Fr::toaltstack()}
-            }
-            if ith_step == 0 {
-                {G1Affine::push(ark_bn254::G1Affine::zero())}
-            } else {
-                for _ in 0..Fq::N_LIMBS * 2 { // bring acc from top of stack
-                    OP_DEPTH OP_1SUB OP_ROLL 
-                }
-            }
-            for _ in 0..g16_scalars.len() {
-                {Fr::fromaltstack()}
-            }
-            // [G1Acc, K0, K1]
+             // [SD0, SD1, G1Acc, K0, K1]
             for _ in 0..g16_scalars.len() {
                 for _ in 0..segment_len { // bring acc from top of stack
                     OP_DEPTH OP_1SUB OP_ROLL 
@@ -526,7 +510,7 @@ impl G1Affine {
                 }
                 for j in 0..num_bits { 
                     OP_FROMALTSTACK
-                    if j / window != i/window as u32 { // keep only bits corresponding to this window
+                    if j / window != i/window { // keep only bits corresponding to this window
                         OP_DROP
                     }
                 }
@@ -904,6 +888,7 @@ pub fn hinted_from_eval_point(p: ark_bn254::G1Affine) -> (Script, Vec<Hint>) {
         // [hints, yinv, x, y]
         {Fq::copy(2)}
         {Fq::copy(1)}
+
         {hinted_script1}
 
         // [hints, yinv, x, y]
@@ -918,6 +903,40 @@ pub fn hinted_from_eval_point(p: ark_bn254::G1Affine) -> (Script, Vec<Hint>) {
     (script, hints)
 }
 
+pub fn hinted_from_eval_points(p: ark_bn254::G1Affine) -> (Script, Vec<Hint>) {
+    let mut hints = Vec::new();
+
+    let py_inv = p.y().unwrap().inverse().unwrap();
+
+    let (hinted_script1, hint1) = hinted_y_from_eval_point(p.y, py_inv);
+    let (hinted_script2, hint2) = hinted_x_from_eval_point(p, py_inv);
+
+    let script = script!{
+        // [yinv, hints,.., x, y]
+        {Fq2::toaltstack()}
+        for _ in 0..Fq::N_LIMBS {
+            OP_DEPTH OP_1SUB OP_ROLL 
+        }
+        {Fq2::fromaltstack()}
+        // [hints, yinv, x, y]
+        {Fq::copy(2)}
+        {Fq::copy(1)}
+        {hinted_script1}
+        // [hints, yinv, x, y]
+        {Fq::copy(2)}
+        {Fq::toaltstack()}
+        {hinted_script2}
+        {Fq::fromaltstack()}
+    };
+
+
+    hints.push(Hint::Fq(py_inv));
+    hints.extend(hint1);
+    hints.extend(hint2);
+
+    (script, hints)
+}
+
 #[cfg(test)]
 mod test {
     use crate::bn254::fq2::Fq2;
@@ -926,7 +945,7 @@ mod test {
     use crate::bn254::fp254impl::Fp254Impl;
     use crate::bn254::fq::Fq;
     use crate::bn254::fr::Fr;
-    use crate::bn254::msm::prepare_msm_input;
+    
     use crate::chunker::common::extract_witness_from_stack;
     use crate::{execute_script_without_stack_limit, treepp::*};
     use super::*;
@@ -1176,7 +1195,7 @@ mod test {
     #[test]
     fn test_hinted_scalar_decomposition() {
         let mut prng = ChaCha20Rng::seed_from_u64(1);
-        const LAMBDA: ark_bn254::Fr = MontFp!("21888242871839275217838484774961031246154997185409878258781734729429964517155");
+        let lambda: ark_bn254::Fr = ark_bn254::Fr::from(BigUint::from_str("21888242871839275217838484774961031246154997185409878258781734729429964517155").unwrap());
         let k = ark_bn254::Fr::rand(&mut prng);
 
         let dec = G1Affine::calculate_scalar_decomposition(k);
@@ -1184,16 +1203,16 @@ mod test {
         let (is_k1_positive, is_k2_positive) = (is_k1_positive != 2, is_k2_positive != 2);
 
         if is_k1_positive && is_k2_positive {
-            assert_eq!(k1 + k2 * LAMBDA, k);
+            assert_eq!(k1 + k2 * lambda, k);
         }
         if is_k1_positive && !is_k2_positive {
-            assert_eq!(k1 - k2 * LAMBDA, k);
+            assert_eq!(k1 - k2 * lambda, k);
         }
         if !is_k1_positive && is_k2_positive {
-            assert_eq!(-k1 + k2 * LAMBDA, k);
+            assert_eq!(-k1 + k2 * lambda, k);
         }
         if !is_k1_positive && !is_k2_positive {
-            assert_eq!(-k1 - k2 * LAMBDA, k);
+            assert_eq!(-k1 - k2 * lambda, k);
         }
         // check if k1 and k2 are indeed small.
         let expected_max_bits = (ark_bn254::Fr::MODULUS_BIT_SIZE + 1) / 2;
@@ -1247,12 +1266,15 @@ mod test {
                 window as u32,
             );
 
+        let mut prev_acc = ark_bn254::G1Affine::new_unchecked(ark_bn254::Fq::ZERO, ark_bn254::Fq::ZERO);
         for (itr, (output_acc, scalar_mul_affine_script, hints)) in all_loop_info.iter().enumerate() {
             
             let script = script! {
                 for hint in hints { // tmul + aux hints
                     { hint.push() }
                 }
+                // G1Acc preimage
+                {G1Affine::push(prev_acc)}
                 for scalar in g16_scalars.iter() {
                     { Fr::push(*scalar) } // scalar bit committed
                 }
@@ -1262,6 +1284,7 @@ mod test {
                 { G1Affine::equalverify() }
                 OP_TRUE
             };
+            prev_acc = *output_acc;
             let exec_result = execute_script_without_stack_limit(script);
             println!(
                 "chunk {} script size: {} max_stack {}",
@@ -1271,6 +1294,7 @@ mod test {
         }
     }
 
+    
     #[test]
     fn test_affine_equalverify() {
         let equalverify = G1Affine::equalverify();
@@ -1355,6 +1379,7 @@ mod test {
         let exec_result = execute_script(script);
         assert!(exec_result.success);
     }
+    
 
     #[test]
     fn test_hintedx_from_eval_point() {

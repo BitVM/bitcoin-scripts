@@ -217,6 +217,50 @@ impl Fq2 {
         (script, hints)
     }
 
+    pub fn hinted_mul_lc4_keep_elements(
+        a: ark_bn254::Fq2, b:ark_bn254::Fq2, c:ark_bn254::Fq2, d:ark_bn254::Fq2
+    ) -> (Script, Vec<Hint>) {
+
+        let mut hints = Vec::new();
+
+        let (hinted_script1, hint1) = Fq::hinted_mul_lc4(7, a.c0, 6, -a.c1, 5, c.c0, 4, -c.c1, 3, b.c0, 2, b.c1, 1, d.c0, 0, d.c1);
+        let (hinted_script2, hint2) = Fq::hinted_mul_lc4(7, a.c0, 6, a.c1, 5, c.c0, 4, c.c1, 3, b.c1, 2, b.c0, 1, d.c1, 0, d.c0);
+
+        let script = script! {
+            // [a, b, c, d] 
+            {Fq2::copy(6)}
+            {Fq::neg(0)}
+            // [a, b, c, d, -a]
+            {Fq2::copy(4)}
+            {Fq::neg(0)}
+            // [a, b, c, d, -a, -c]
+            {Fq2::copy(8)}
+            // [a, b, c, d, -a, -c, b]
+            {Fq2::copy(6)}
+            // [a, b, c, d, -a, -c, b, d]
+            {hinted_script1}
+            {Fq::toaltstack()}
+            // [a, b, c, d]
+            {Fq2::copy(6)} {Fq2::copy(6)} {Fq2::copy(6)} {Fq2::copy(6)} 
+            // [a, b, c, d, a, b, c, d]
+            {Fq2::toaltstack()} {Fq2::roll(2)} 
+            // [a, c, b, d]
+            {Fq::roll(1)}
+            {Fq2::fromaltstack()}
+            {Fq::roll(1)}
+            // [a, c, b', d']
+            {hinted_script2}
+            {Fq::fromaltstack()}
+            {Fq::roll(1)}
+        };
+
+        hints.extend(hint1);
+        hints.extend(hint2);
+
+        (script, hints)
+    }
+
+    
     /// Square the top Fq2 element
     pub fn hinted_square(a: ark_bn254::Fq2) -> (Script, Vec<Hint>) {
         let mut hints = Vec::new();

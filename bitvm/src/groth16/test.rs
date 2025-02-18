@@ -72,7 +72,7 @@ fn test_hinted_groth16_verifier() {
 
     let proof = Groth16::<E>::prove(&pk, circuit, &mut rng).unwrap();
 
-    let (hinted_groth16_verifier, hints) = Verifier::hinted_verify(&vec![c], &proof, &vk);
+    let (hinted_groth16_verifier, hints) = Verifier::hinted_verify(&[c], &proof, &vk);
 
     println!(
         "hinted_groth16_verifier: {:?} bytes",
@@ -114,7 +114,7 @@ fn test_hinted_groth16_verifier_small_public() {
 
     let proof = Groth16::<E>::prove(&pk, circuit, &mut rng).unwrap();
 
-    let (hinted_groth16_verifier, hints) = Verifier::hinted_verify(&vec![c], &proof, &vk);
+    let (hinted_groth16_verifier, hints) = Verifier::hinted_verify(&[c], &proof, &vk);
 
     println!(
         "hinted_groth16_verifier: {:?} bytes",
