@@ -17,7 +17,7 @@ pub struct WinternitzSecret {
     parameters: Parameters,
 }
 
-// Bits per digit
+// Bits per digit (block)
 pub const LOG_D: u32 = 4;
 
 impl WinternitzSecret {
@@ -27,9 +27,9 @@ impl WinternitzSecret {
         let mut rng = rand::rngs::OsRng;
         rand::RngCore::fill_bytes(&mut rng, &mut buffer);
 
-        // TODO: Figure out the best parameters
-        //let parameters = Parameters::new((BLAKE3_HASH_LENGTH * 2) as u32, 4);
-        let parameters = Parameters::new((message_size * 2) as u32, LOG_D);
+        // Best parameters depend on the stack depth, without that limitation best option is LOG_D = 4 and used Winternitz version here
+        //let parameters = WINTERNITZ_HASH_PARAMETERS;
+        let parameters = Parameters::new_by_bit_length(message_size as u32 * 8, LOG_D);
         WinternitzSecret {
             secret_key: hex::encode(buffer).into(),
             parameters,
@@ -189,7 +189,7 @@ mod tests {
         let public_key = WinternitzPublicKey::from(&secret);
         let reference_public_key = generate_public_key(&secret.parameters, &secret.secret_key);
 
-        for i in 0..secret.parameters.total_digit_count() {
+        for i in 0..secret.parameters.total_length() {
             assert_eq!(
                 public_key.public_key[i as usize],
                 reference_public_key[i as usize]
@@ -204,9 +204,9 @@ mod tests {
 
         assert_eq!(
             public_key.public_key.len(),
-            public_key.parameters.total_digit_count() as usize
+            public_key.parameters.total_length() as usize
         );
-        for i in 0..public_key.parameters.total_digit_count() {
+        for i in 0..public_key.parameters.total_length() {
             assert_eq!(
                 public_key.public_key[i as usize].len(),
                 20,

@@ -1,18 +1,21 @@
 use std::collections::HashMap;
-
 use bitcoin_script_stack::stack::{StackTracker, StackVariable};
-
-pub use bitcoin_script::script;
 pub use bitcoin_script::builder::StructuredScript as Script;
+use crate::u4::{u4_add_stack::*, u4_logic_stack::*, u4_shift_stack::*};
 
-use crate::u4::{u4_add_stack::*, u4_logic_stack::*, u4_shift_stack::*, u4_std::u4_repeat_number};
+// Blake3 paper: https://github.com/BLAKE3-team/BLAKE3-specs/blob/master/blake3.pdf
+// Referance Implementation: https://github.com/BLAKE3-team/BLAKE3/blob/master/reference_impl/reference_impl.rs
+// Each u32 is represented as 8 u4's, function and variable names generally follow the referance implementation
 
+/// Starting constants, same notation as the papers (last four values are not used)
 const IV: [u32; 8] = [
     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
 ];
 
+/// Permutation order for the after of each blake3 round, from the Table 2 in the paper
 const MSG_PERMUTATION: [u8; 16] = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
 
+/// For the blake3, a modulo, quotient, shift and xor table is used. Also xor table has 2 variants due to the large size of the operation space (16 * 16). For more details, you can refer to the code in the src/u4 folder. 
 #[derive(Clone, Debug, Copy)]
 pub struct TablesVars {
     modulo: StackVariable,
@@ -47,104 +50,73 @@ impl TablesVars {
         stack.drop(self.xor_table);
         stack.drop(self.depth_lookup);
     }
-
-
 }
 
-
-pub fn right_rotate_xored(stack: &mut StackTracker, var_map: &mut HashMap<u8, StackVariable>, x:u8, y:u8, n: u8, use_full_tables: bool ) -> StackVariable {
-    let pos_shift = 8 - n / 4;
-
+/// Calculates the bitwise XOR of two u32 numbers (x, y) and cyclically shifts them to right by the given value, which should be a multiple of 4. Consumes x and leaves y on the stack.
+pub fn xor_and_rotate_right_by_multiple_of_4(stack: &mut StackTracker, var_map: &mut HashMap<u8, StackVariable>, x: u8, y: u8, rotation: u8, use_full_tables: bool) -> StackVariable {
+    let pos_shift = 8 - rotation / 4;
     let y = var_map[&y];
     let x = var_map.get_mut(&x).unwrap();
-
-    for i in pos_shift..pos_shift+8 {
+    for i in pos_shift..(pos_shift + 8) {
         let n = i % 8;
-
         let mut z = 0;
         if i < 8 {
             z = pos_shift;
         }
-
-        xor_2nib(stack, x, y, z, n, use_full_tables);
+        xor_2_nibbles(stack, x, y, z, n, use_full_tables);
     }
-
     stack.join_count(&mut stack.get_var_from_stack(7), 7)
-
 }    
 
-pub fn xor_2nib_half(stack: &mut StackTracker, x: &mut StackVariable, y: StackVariable, nx: u8, ny: u8 )  -> StackVariable {
-
-    stack.op_depth();
-
-    stack.op_dup();
-
-    stack.copy_var_sub_n(y, ny as u32);
-    stack.move_var_sub_n(x, nx as u32);
-    stack.op_2dup();
-    stack.op_min();
-    stack.to_altstack();
-
-    stack.op_max();
-
-    stack.op_sub();
-    stack.op_1sub();
-
-    stack.op_pick();
-
-
-    stack.op_add();
-    
-    stack.from_altstack();
-
-    stack.op_sub();
-    
-    stack.op_pick()
-}
-
-pub fn xor_2nib(stack: &mut StackTracker, x: &mut StackVariable, y: StackVariable, nx: u8, ny: u8, use_full_tables: bool )  -> StackVariable {
+/// Calculates bitwise XOR of two nibbles (x_{nibble_x} and y_{nibble_y}), each given by their u32 variable and the index of their nibble, consumes the nibble of x (which shifts the remaining nibbles of x)
+pub fn xor_2_nibbles(stack: &mut StackTracker, x: &mut StackVariable, y: StackVariable, nibble_x: u8, nibble_y: u8, use_full_tables: bool)  -> StackVariable {
     if !use_full_tables {
-        return xor_2nib_half(stack, x, y, nx, ny);
+        stack.op_depth();
+
+        stack.op_dup();
+
+        stack.copy_var_sub_n(y, nibble_y as u32);
+        stack.move_var_sub_n(x, nibble_x as u32);
+        stack.op_2dup();
+        stack.op_min();
+        stack.to_altstack();
+
+        stack.op_max();
+
+        stack.op_sub();
+        stack.op_1sub();
+
+        stack.op_pick();
+
+
+        stack.op_add();
+        
+        stack.from_altstack();
+
+        stack.op_sub();
+        
+        stack.op_pick()
+
+    } else {
+        stack.op_depth();
+        stack.op_dup();
+
+        stack.copy_var_sub_n(y, nibble_y as u32);
+
+        stack.op_sub();
+        stack.op_pick();
+
+        stack.op_add();
+
+        stack.move_var_sub_n(x, nibble_x as u32);
+
+        stack.op_add();
+        stack.op_pick()
     }
-
-    stack.op_depth();
-    stack.op_dup();
-
-    stack.copy_var_sub_n(y, ny as u32);
-
-    stack.op_sub();
-    stack.op_pick();
-
-    stack.op_add();
-
-    stack.move_var_sub_n(x, nx as u32);
-
-    stack.op_add();
-    stack.op_pick()
 }
 
-pub fn right_rotate7_xored_sub(
-    stack: &mut StackTracker,
-    x: &mut StackVariable,
-    y: StackVariable,
-    tables: &TablesVars,
-    n: u8,
-) {
-    stack.from_altstack();
-
-    let r0 = xor_2nib(stack, x, y, 0, n, tables.use_full_tables);
-
-    stack.rename(r0, &format!("z{}", n));
-    stack.copy_var(r0);
-
-    stack.to_altstack();
-
-    // r7 r0 >> 3
-    let w1 = u4_2_nib_shift_blake(stack, tables.shift_tables);
-    stack.rename(w1, &format!("w{}", n + 1));
-}
-
-pub fn right_rotate7_xored(
+/// Calculates the bitwise XOR of two u32 numbers (x, y) and cyclically shifts them to right by 7. Consumes x and leaves y on the stack.
+pub fn xor_and_rotate_right_by_7(
     stack: &mut StackTracker,
     var_map: &mut HashMap<u8, StackVariable>,
     x: u8,
@@ -161,8 +133,7 @@ pub fn right_rotate7_xored(
     let x = var_map.get_mut(&x).unwrap();
 
     // nib 6 xored
-
-    let z6 = xor_2nib(stack, x, y, 6, 6, tables.use_full_tables);
+    let z6 = xor_2_nibbles(stack, x, y, 6, 6, tables.use_full_tables);
     stack.rename(z6, "z6");
 
     // nib 6 copy saved
@@ -170,7 +141,7 @@ pub fn right_rotate7_xored(
     stack.to_altstack();
     
     //nib 7 xored
-    let z7 = xor_2nib(stack, x, y, 6, 7, tables.use_full_tables);
+    let z7 = xor_2_nibbles(stack, x, y, 6, 7, tables.use_full_tables);
     stack.rename(z7, "z7");
     stack.copy_var(z7);
     stack.to_altstack();
@@ -181,7 +152,18 @@ pub fn right_rotate7_xored(
     stack.rename(w0, "w0");
 
     for i in 0..6 {
-        right_rotate7_xored_sub(stack, x, y, tables, i);
+        stack.from_altstack();
+
+        let r0 = xor_2_nibbles(stack, x, y, 0, i, tables.use_full_tables);
+    
+        stack.rename(r0, &format!("z{}", i));
+        stack.copy_var(r0);
+    
+        stack.to_altstack();
+    
+        // r7 r0 >> 3
+        let w1 = u4_2_nib_shift_blake(stack, tables.shift_tables);
+        stack.rename(w1, &format!("w{}", i + 1));
     }
 
     stack.from_altstack();
@@ -190,11 +172,11 @@ pub fn right_rotate7_xored(
     let w7 = u4_2_nib_shift_blake(stack, tables.shift_tables);
     stack.rename(w7, "w7");
     
-
     stack.join_count(&mut w0, 7)
 }
 
 
+/// Adds the given constant numbers and u32 variables. to_copy and to_move specify which of these variables are to be consumed and left
 pub fn u4_add_direct( stack: &mut StackTracker, nibble_count: u32, 
             to_copy: Vec<StackVariable>, 
             mut to_move: Vec<&mut StackVariable>, 
@@ -213,7 +195,7 @@ pub fn u4_add_direct( stack: &mut StackTracker, nibble_count: u32,
     //split the parts of the constant (still one element)
     let mut constant_parts : Vec<Vec<u32>> = Vec::new();
     for n in constants {
-        let parts = (0..8).rev().map(|i| (n >> (i * 4)) & 0xF ).collect();
+        let parts = (0..8).rev().map(|i| (n >> (i * 4)) & 0xF).collect();
         constant_parts.push(parts);
     }
 
@@ -221,7 +203,6 @@ pub fn u4_add_direct( stack: &mut StackTracker, nibble_count: u32,
 
     for i in (0..nibble_count).rev() {
 
-        //copy the nibbles from the back
         for x in to_copy.iter() {
             stack.copy_var_sub_n(*x, i);
         }
@@ -258,12 +239,11 @@ pub fn u4_add_direct( stack: &mut StackTracker, nibble_count: u32,
             let carry = stack.get_value_from_table(tables.quotient, None);
             stack.rename(carry, "carry");
         }
-
-
     }
 
 }
 
+/// Applies the G function (same notation as the paper) with the given parameters to the variables
 #[allow(clippy::too_many_arguments)]
 pub fn g(
     stack: &mut StackTracker,
@@ -272,8 +252,8 @@ pub fn g(
     b: u8,
     c: u8,
     d: u8,
-    mut mx: StackVariable,
-    mut my: StackVariable,
+    mut m_two_i: StackVariable,
+    mut m_two_i_plus_one: StackVariable,
     tables: &TablesVars,
     last_round: bool,
 ) {
@@ -283,16 +263,16 @@ pub fn g(
     let mut va = var_map.get_mut(&a).unwrap();
 
     if last_round {
-        u4_add_direct(stack, 8, vec![vb], vec![&mut va, &mut mx], vec![], tables);
+        u4_add_direct(stack, 8, vec![vb], vec![&mut va, &mut m_two_i], vec![], tables);
     } else {
-        u4_add_direct(stack, 8, vec![vb, mx], vec![&mut va], vec![], tables);
+        u4_add_direct(stack, 8, vec![vb, m_two_i], vec![&mut va], vec![], tables);
     }
     
     //stores the results in a
     *va = stack.from_altstack_joined(8, &format!("state_{}", a));
 
     // right rotate d xor a ( consumes d and copies a)
-    let ret = right_rotate_xored(stack, var_map, d, a, 16, tables.use_full_tables);
+    let ret = xor_and_rotate_right_by_multiple_of_4(stack, var_map, d, a, 16, tables.use_full_tables);
     // saves in d
     var_map.insert(d, ret);
 
@@ -308,20 +288,20 @@ pub fn g(
     );
     *vc = stack.from_altstack_joined(8, &format!("state_{}", c));
 
-    let ret = right_rotate_xored(stack, var_map, b, c, 12, tables.use_full_tables);
+    let ret = xor_and_rotate_right_by_multiple_of_4(stack, var_map, b, c, 12, tables.use_full_tables);
     var_map.insert(b, ret);
 
     let vb = var_map[&b];
     let mut va = var_map.get_mut(&a).unwrap();
     if last_round {
-        u4_add_direct(stack, 8, vec![vb], vec![&mut va, &mut my], vec![], tables);
+        u4_add_direct(stack, 8, vec![vb], vec![&mut va, &mut m_two_i_plus_one], vec![], tables);
     } else {
-        u4_add_direct(stack, 8, vec![vb, my], vec![&mut va], vec![], tables);
+        u4_add_direct(stack, 8, vec![vb, m_two_i_plus_one], vec![&mut va], vec![], tables);
     }
 
     *va = stack.from_altstack_joined(8, &format!("state_{}", a));
 
-    let ret = right_rotate_xored(stack, var_map, d, a, 8, tables.use_full_tables);
+    let ret = xor_and_rotate_right_by_multiple_of_4(stack, var_map, d, a, 8, tables.use_full_tables);
     var_map.insert(d, ret);
     stack.rename(ret, &format!("state_{}", d));
 
@@ -337,11 +317,12 @@ pub fn g(
     );
     *vc = stack.from_altstack_joined(8, &format!("state_{}", c));
 
-    let ret = right_rotate7_xored(stack, var_map, b, c, tables);
+    let ret = xor_and_rotate_right_by_7(stack, var_map, b, c, tables);
     var_map.insert(b, ret);
     stack.rename(ret, &format!("state_{}", b));
 }
 
+/// Applies G functions for the round
 pub fn round(
     stack: &mut StackTracker,
     state_var_map: &mut HashMap<u8, StackVariable>,
@@ -448,6 +429,7 @@ pub fn round(
     );
 }
 
+/// Permutates the internal state, used after each round
 pub fn permutate(message_var_map: &HashMap<u8, StackVariable>) -> HashMap<u8, StackVariable> {
     let mut ret = HashMap::new();
     for i in 0..16_u8 {
@@ -456,6 +438,7 @@ pub fn permutate(message_var_map: &HashMap<u8, StackVariable>) -> HashMap<u8, St
     ret
 }
 
+/// Initializes the internal state, uses the same variable names as the paper
 pub fn init_state(
     stack: &mut StackTracker,
     chaining: bool,
@@ -490,6 +473,7 @@ pub fn init_state(
     state_map
 }
 
+/// Applies the blake3 compression function to the given 512 bit message, consumes everything and leaves only the final value
 #[allow(clippy::too_many_arguments)]
 pub fn compress(
     stack: &mut StackTracker,
@@ -507,15 +491,11 @@ pub fn compress(
 
     let mut state = init_state(stack, chaining, counter, block_len, flags);
 
-    for i in 0..7 {
-        //round 6 could consume the message
-        round(stack, &mut state, &message, tables, i == 6);
-
-        if i == 6 {
-            break;
-        }
+    for _ in 0..6 {
+        round(stack, &mut state, &message, tables, false);
         message = permutate(&message);
     }
+    round(stack, &mut state, &message, tables, true); //Last iteration, consumes the message
 
     for i in (0..final_rounds).rev() {
         let mut tmp = Vec::new();
@@ -524,7 +504,7 @@ pub fn compress(
         for n in 0..8 {
             let v2 = *state.get(&(i + 8)).unwrap();
             let v1 = state.get_mut(&i).unwrap();
-            tmp.push(xor_2nib(stack, v1, v2, 0, n, tables.use_full_tables));
+            tmp.push(xor_2_nibbles(stack, v1, v2, 0, n, tables.use_full_tables));
 
             if last_round && n % 2 == 1 {
                 stack.to_altstack();
@@ -552,337 +532,12 @@ pub fn get_flags_for_block(i: u32, num_blocks: u32) -> u32 {
     0
 }
 
-// final rounds: 8 => 32 bytes hash
-// final rounds: 5 => 20 bytes hash (blake_160)
-pub fn blake3(stack: &mut StackTracker, mut msg_len: u32, final_rounds: u8) {
-    assert!(
-        msg_len <= 288,
-        "This blake3 implementation supports up to 288 bytes"
-    );
-
-    let use_full_tables = msg_len <= 232;
-
-    let num_blocks = msg_len.div_ceil(64);
-    let mut num_padding_bytes = num_blocks * 64 - msg_len;
-
-    //to handle the message the padding needs to be multiple of 4
-    //so if it's not multiple it needs to be added at the beginning
-    let mandatory_first_block_padding = num_padding_bytes % 4;
-    num_padding_bytes -= mandatory_first_block_padding;
-
-    if mandatory_first_block_padding > 0 {
-        stack.custom(
-            u4_repeat_number(0, (mandatory_first_block_padding) * 2),
-            0,
-            false,
-            0,
-            "padding",
-        );
-    }
-
-    let mut original_message = Vec::new();
-    for i in 0..msg_len / 4 {
-        let m = stack.define(8, &format!("msg_{}", i));
-        original_message.push(m);
-    }
-
-    for _ in original_message.iter() {
-        stack.to_altstack();
-    }
-
-
-    let tables = TablesVars::new(stack, use_full_tables);
-
-    for _ in original_message.iter() {
-        stack.from_altstack();
-    }
-
-
-    //process every block
-    for i in 0..num_blocks {
-        let last_round = i == num_blocks - 1;
-        let intermediate_rounds = if last_round { final_rounds } else { 8 };
-
-        let flags = get_flags_for_block(i, num_blocks);
-
-        // add the padding on the last round
-        if last_round && num_padding_bytes > 0 {
-            stack.custom(
-                u4_repeat_number(0, (num_padding_bytes) * 2),
-                0,
-                false,
-                0,
-                "padding",
-            );
-            for i in 0..(num_padding_bytes / 4) {
-                let m = stack.define(8, &format!("padd_{}", i));
-                original_message.push(m);
-            }
-        }
-
-        // create the current block message map
-        let mut message = HashMap::new();
-        for m in 0..16 {
-            message.insert(m as u8, original_message[m + (16 * i) as usize]);
-        }
-
-        // compress the block
-        compress(
-            stack,
-            i > 0,
-            0,
-            msg_len.min(64),
-            flags,
-            message,
-            &tables,
-            intermediate_rounds,
-            last_round,
-        );
-
-        if msg_len > 64 {
-            msg_len -= 64;
-        }
-
-        //drop the rest of the state
-        for _ in 0..16 - intermediate_rounds {
-            stack.drop(stack.get_var_from_stack(0));
-        }
-
-    }
-
-    //drop tables
-    tables.drop(stack);
-
-    //get the result hash
-    stack.from_altstack_joined(final_rounds as u32 * 8, "blake3-hash");
-}
-
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::collections::HashMap;
     pub use bitcoin_script::script;
-    //pub use bitcoin::ScriptBuf as Script;
-    use bitcoin_script_stack::{debugger::debug_script, script_util::verify_n, stack::StackTracker, optimizer::optimize};
-
-    use super::*;
-    use crate::u4::u4_std::u4_hex_to_nibbles;
-
-    fn verify_blake3_hash(result: &str) -> Script {
-        script! {
-            { u4_hex_to_nibbles(result)}
-            for _ in 0..result.len() {
-                OP_TOALTSTACK
-            }
-
-            for i in 1..result.len() {
-                {i}
-                OP_ROLL
-            }
-
-            for _ in 0..result.len() {
-                OP_FROMALTSTACK
-                OP_EQUALVERIFY
-            }
-
-        }
-    }
-
-    #[test]
-    fn test_blake3_for_nibble_array() {
-        fn nib_to_byte_array(digits: &[u8]) -> Vec<u8> {
-            let mut msg_bytes = Vec::with_capacity(digits.len() / 2);
-        
-            for nibble_pair in digits.chunks(2) {
-                let byte = (nibble_pair[0] << 4) | (nibble_pair[1] & 0b00001111);
-                msg_bytes.push(byte);
-            }
-        
-            fn le_to_be_byte_array(byte_array: Vec<u8>) -> Vec<u8> {
-                assert!(byte_array.len() % 4 == 0, "Byte array length must be a multiple of 4");
-                byte_array
-                    .chunks(4) // Process each group of 4 bytes (one u32)
-                    .flat_map(|chunk| chunk.iter().rev().cloned()) // Reverse each chunk
-                    .collect()
-            }
-            le_to_be_byte_array(msg_bytes)
-        }
-
-
-        let mut stack = StackTracker::new();
-        let msg:Vec<u8> = vec![2, 3, 14, 5, 5, 11, 1, 4, 6, 6, 2, 0, 6, 2, 7, 11, 5, 5, 15, 10, 5, 1, 9, 2, 10, 6, 12, 9, 4, 8, 9, 14, 13, 13, 5, 10, 12, 11, 5, 12, 5, 3, 14, 15, 11, 12, 12, 12, 12, 13, 10, 11, 2, 0, 14, 9, 10, 9, 4, 4, 2, 3, 10, 15, 1, 8, 14, 13, 7, 13, 2, 12, 14, 7, 7, 15, 13, 14, 4, 6, 11, 4, 0, 15, 8, 2, 3, 1, 7, 2, 12, 1, 13, 1, 4, 5, 4, 7, 4, 6, 15, 10, 13, 11, 6, 11, 3, 8, 12, 15, 7, 1, 2, 11, 1, 14, 10, 1, 7, 13, 12, 14, 2, 9, 4, 7, 15, 13, 0, 9, 12, 13, 2, 14, 3, 9, 14, 9, 11, 12, 0, 5, 1, 2, 10, 10, 9, 12, 1, 2, 14, 0, 10, 7, 6, 1, 5, 11, 7, 8, 13, 5, 7, 7, 1, 7, 15, 11, 6, 0, 12, 4, 14, 10, 3, 2, 2, 9, 5, 5, 14, 5, 8, 1, 4, 5, 3, 1, 15, 7, 3, 15, 0, 0, 11, 15, 4, 12, 10, 10, 2, 13, 5, 5, 11, 11, 3, 9, 10, 15, 12, 13, 10, 13, 0, 10, 7, 0, 9, 9, 15, 12, 15, 11, 4, 15, 5, 12, 3, 5, 5, 12, 10, 3, 12, 13, 13, 2, 11, 4, 14, 13, 7, 5, 11, 8, 4, 5, 1, 9, 8, 10, 2, 9, 9, 15, 0, 4, 15, 4, 2, 15, 11, 7, 4, 0, 13, 1, 15, 9, 4, 11, 5, 8, 2, 15, 0, 12, 8, 14, 7, 2, 8, 9, 8, 8, 15, 11, 3, 9, 15, 9, 3, 9, 7, 10, 11, 8, 5, 0, 5, 2, 2, 0, 11, 10, 15, 14, 8, 10, 15, 15, 13, 3, 2, 8, 5, 5, 4, 13, 0, 10, 4, 14, 10, 4, 9, 1, 9, 11, 12, 1, 5, 4, 8, 10, 3, 5, 13, 10, 11, 1, 7, 7, 13, 14, 9, 5, 10, 4, 4, 9, 12, 5, 14, 12, 1, 13, 6, 10, 5, 15, 8, 5, 5, 12, 2, 11, 2, 1, 1, 2, 6, 8, 6, 13, 7, 11, 3, 7, 13, 10, 2, 11].to_vec();
-
-        let msg_len = msg.len();
-
-
-        let expected_hex_out = blake3::hash(&nib_to_byte_array(&msg)).to_string();
-        println!("expected {:?}", expected_hex_out);
-
-        let inp =     script! {
-            for nibble in msg {
-                { nibble }
-            }
-        };
-        stack.custom(
-            script! { { inp } },
-            0,
-            false,
-            0,
-            "msg",
-        );
-
-
-        let start = stack.get_script().len();
-        blake3(&mut stack, (msg_len/2) as u32, 8);
-        let end = stack.get_script().len();
-        println!("Blake3 size: {} for: {} bytes", end - start, (msg_len/2) as u32);
-
-
-        stack.custom(
-            script! { {verify_blake3_hash(&expected_hex_out)}},
-            1,
-            false,
-            0,
-            "verify",
-        );
-
-        stack.op_true();
-        let res =  stack.run();
-        assert!(res.success);
-    }
-
-    #[test]
-    fn test_blake3() {
-        let hex_out = "86ca95aefdee3d969af9bcc78b48a5c1115be5d66cafc2fc106bbd982d820e70";
-
-        let mut stack = StackTracker::new();
-
-        let hex_in = "00000001".repeat(16);
-        stack.custom(
-            script! { { u4_hex_to_nibbles(&hex_in) } },
-            0,
-            false,
-            0,
-            "msg",
-        );
-
-        let start = stack.get_script().len();
-        let optimized_start = optimize(stack.get_script().compile()).len();
-
-        blake3(&mut stack, 64, 8);
-        let end = stack.get_script().len();
-        println!("Blake3 size: {}", end - start);
-
-        let optimized_end = optimize(stack.get_script().compile()).len();
-        println!("Blake3 optimized size: {}", optimized_end - optimized_start);
-
-        stack.custom(
-            script! { {verify_blake3_hash(hex_out)}},
-            1,
-            false,
-            0,
-            "verify",
-        );
-
-        stack.op_true();
-
-        assert!(stack.run().success);
-
-        //assert optimized version too
-        let optimized = optimize(stack.get_script().compile());
-        assert!(debug_script(optimized).0.result().unwrap().success);        
-
-    }
-
-    #[test]
-    fn test_blake3_160() {
-        let hex_out = "290eef2c4633e64835e2ea6395e9fc3e8bf459a7";
-
-        let mut stack = StackTracker::new();
-
-        let hex_in = "00000001".repeat(10);
-        stack.custom(
-            script! { { u4_hex_to_nibbles(&hex_in) } },
-            0,
-            false,
-            0,
-            "msg",
-        );
-
-        let start = stack.get_script().len();
-        blake3(&mut stack, 40, 5);
-        let end = stack.get_script().len();
-        println!("Blake3 size: {}", end - start);
-
-        stack.custom(
-            script! { {verify_blake3_hash(hex_out)}},
-            1,
-            false,
-            0,
-            "verify",
-        );
-
-        stack.op_true();
-
-        assert!(stack.run().success);
-    }
-
-    fn test_long_blakes(repeat: u32, hex_out: &str) {
-        let mut stack = StackTracker::new();
-
-        let hex_in = "00000001".repeat(repeat as usize);
-        stack.custom(
-            script! { { u4_hex_to_nibbles(&hex_in) } },
-            0,
-            false,
-            0,
-            "msg",
-        );
-
-        let start = stack.get_script().len();
-        let start_optimized = optimize(stack.get_script().compile()).len();
-        blake3(&mut stack, repeat * 4, 8);
-        let end = stack.get_script().len();
-        println!("Blake3 size: {} for: {} bytes", end - start, repeat * 4);
-
-        let end_optimized = optimize(stack.get_script().compile()).len();
-        println!("Blake3 optimized size: {} for: {} bytes", end_optimized - start_optimized, repeat * 4);
-
-        stack.custom(
-            script! { {verify_blake3_hash(hex_out)}},
-            1,
-            false,
-            0,
-            "verify",
-        );
-
-        stack.op_true();
-
-        assert!(stack.run().success);
-    }
-
-    #[test]
-    fn test_blake3_long() {
-        let hex_out = "9bd93dd19a93d1d3522c6717d77a2e20e11b8627efa5df80c76d727ca7431892";
-        test_long_blakes(20, hex_out);
-
-        let hex_out = "08729d0161b725b93e83ce79b06c534ce7684d39e21ad05074b67e0ac89ef44a";
-        test_long_blakes(40, hex_out);
-
-        //limit not moving padding
-        let hex_out = "f2487b9f736cc30faf28952733c95560dc60e72cc7731b03a9ecfc86665e2e85";
-        test_long_blakes(48, hex_out);
-
-        //limit full tables
-        let hex_out = "034acb9761990badc714913b9bb6329d96ed91ea01530a55e8fd4c8ffb3aee42";
-        test_long_blakes(57, hex_out);
-
-        let hex_out = "a23e7a7e11ff2febf28a205c8dc0ca57ae4eb2d0eb079bb5c6a5bdcdd3e56de1";
-        test_long_blakes(60, hex_out);
-
-        //max limit
-        let hex_out = "b6c1b3d6b1555e0d20bd5188e4b8b20488c36105fd9c8971ac10dd267e612e4f";
-        test_long_blakes(72, hex_out);
-    }
+    use bitcoin_script_stack::{script_util::verify_n, stack::StackTracker};
 
     #[test]
     fn test_rrot7() {
@@ -897,7 +552,7 @@ mod tests {
         var_map.insert(0, ret[0]);
         var_map.insert(1, ret[1]);
 
-        right_rotate7_xored(&mut stack, &mut var_map, 0, 1, &tables);
+        xor_and_rotate_right_by_7(&mut stack, &mut var_map, 0, 1, &tables);
 
         stack.number_u32(0x57bf5f7b);
 

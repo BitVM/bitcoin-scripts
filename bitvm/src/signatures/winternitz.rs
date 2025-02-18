@@ -1,177 +1,142 @@
 use super::utils::*;
 use crate::treepp::*;
-use bitcoin::{
-    hashes::{hash160, Hash},
-    Witness,
-};
+use bitcoin::{hashes::{hash160, Hash}, Witness};
 use serde::{Deserialize, Serialize};
-use std::{cmp::min, marker::PhantomData};
+use std::marker::PhantomData;
 
 type HashOut = [u8; 20];
 pub type PublicKey = Vec<HashOut>;
 pub type SecretKey = Vec<u8>;
 
+/// Contains the parameters to use with `Winternitz` struct
 #[derive(Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 pub struct Parameters {
-    n0: u32,
-    log_d: u32,
-    n1: u32,
-    d: u32,
-    n: u32,
-}
-
-pub struct DigitSignature {
-    pub hash_bytes: Vec<u8>,
-    pub message_digit: u32,
+    /// Number of blocks of the actual message 
+    message_length: u32,
+    /// Number of bits in one block
+    block_length: u32,
+    /// Number of blocks of the checksum part 
+    checksum_length: u32
 }
 
 impl Parameters {
-    pub const fn new(n0: u32, log_d: u32) -> Self {
+    /// Creates parameters with given message length (number of blocks in the message) and block length (number of bits in one block, in the closed range 4, 8)
+    pub const fn new(message_block_count: u32, block_length: u32) -> Self {
         assert!(
-            4 <= log_d && log_d <= 8,
+            4 <= block_length && block_length <= 8,
             "You can only choose block lengths in the range [4, 8]"
         );
-        let d: u32 = (1 << log_d) - 1;
-        let n1: u32 = log_base_ceil(d * n0, d + 1) + 1;
-        let n: u32 = n0 + n1;
         Parameters {
-            n0,
-            log_d,
-            n1,
-            d,
-            n,
+            message_length: message_block_count,
+            block_length: block_length,
+            checksum_length: log_base_ceil(((1 << block_length) - 1) * message_block_count, 1 << block_length) + 1,
         }
     }
+
+    /// Creates parameters with given message_length (number of bits in the message) and block length (number of bits in one block, in the closed range 4, 8)
+    pub const fn new_by_bit_length(number_of_bits: u32, block_length: u32) -> Self {
+        assert!(
+            4 <= block_length && block_length <= 8,
+            "You can only choose block lengths in the range [4, 8]"
+        );
+        let message_block_count = (number_of_bits + block_length - 1) / block_length;
+        Parameters {
+            message_length: message_block_count,
+            block_length: block_length,
+            checksum_length: log_base_ceil(((1 << block_length) - 1) * message_block_count, 1 << block_length) + 1,
+        }
+    }
+
+    /// Maximum value of a digit
+    fn d(&self) -> u32 {
+        (1 << self.block_length) - 1
+    }
+
+    /// Number of bytes that can be represented at maximum with the parameters
     fn byte_message_length(&self) -> u32 {
-        (self.n0 * self.log_d + 7) / 8
+        (self.message_length * self.block_length + 7) / 8
     }
-    pub fn total_digit_count(&self) -> u32 {
-        self.n
+
+    /// Total number of blocks, i.e. sum of the number of blocks in the actual message and the checksum
+    pub fn total_length(&self) -> u32 {
+        self.message_length + self.checksum_length
     }
 }
 
-fn public_key_for_digit(ps: &Parameters, secret_key: &SecretKey, digit_index: u32) -> HashOut {
-    let mut secret_i = secret_key.clone();
-    secret_i.push(digit_index as u8);
-    let mut hash = hash160::Hash::hash(&secret_i);
-    for _ in 0..ps.d {
-        hash = hash160::Hash::hash(&hash[..]);
-    }
-    *hash.as_byte_array()
-}
 
-pub fn digit_signature(
-    secret_key: &SecretKey,
-    digit_index: u32,
-    message_digit: u32,
-) -> DigitSignature {
+/// Returns the signature of a given digit (block), requires the digit index to modify the secret key for each digit 
+pub fn digit_signature(secret_key: &SecretKey, digit_index: u32, message_digit: u32) -> HashOut {
     let mut secret_i = secret_key.clone();
     secret_i.push(digit_index as u8);
     let mut hash = hash160::Hash::hash(&secret_i);
     for _ in 0..message_digit {
         hash = hash160::Hash::hash(&hash[..]);
     }
-    let hash_bytes = hash.as_byte_array().to_vec();
-    DigitSignature {
-        hash_bytes,
-        message_digit,
-    }
+    *hash.as_byte_array()
 }
 
+/// Returns the public key of a given digit (block), requires the digit index to modify the secret key for each digit 
+fn public_key_for_digit(ps: &Parameters, secret_key: &SecretKey, digit_index: u32) -> HashOut {
+    digit_signature(secret_key, digit_index, ps.d())
+}
+
+/// Returns the public key for the given secret key and the parameters
 pub fn generate_public_key(ps: &Parameters, secret_key: &SecretKey) -> PublicKey {
-    let mut public_key = PublicKey::with_capacity(ps.n as usize);
-    for i in 0..ps.n {
+    let mut public_key = PublicKey::with_capacity(ps.total_length() as usize);
+    for i in 0..ps.total_length() {
         public_key.push(public_key_for_digit(ps, secret_key, i));
     }
     public_key
 }
 
+/// Checksum of the message (negated sum of the digits)
 fn checksum(ps: &Parameters, digits: Vec<u32>) -> u32 {
     let mut sum = 0;
     for digit in digits {
         sum += digit;
     }
-    ps.d * ps.n0 - sum
+    ps.d() * ps.message_length - sum
 }
 
+/// Appends checksum to the given message (digits), and reverses the whole message (with checksum) for the ease of usage in the bitcoin script
 fn add_message_checksum(ps: &Parameters, mut digits: Vec<u32>) -> Vec<u32> {
-    let mut checksum_digits = to_digits(checksum(ps, digits.clone()), ps.d + 1, ps.n1 as i32);
+    let mut checksum_digits = to_digits(checksum(ps, digits.clone()), ps.d() + 1, ps.checksum_length as i32);
     checksum_digits.append(&mut digits);
     checksum_digits.reverse();
     checksum_digits
 }
-/*
-    VERIFIER: These are signature verifiers
-        1)  ListpickVerifier:
-            Description: This generates hashes for each possible value and then uses OP_PICK
-            to get the corresponding one from the created list. Also as a small improvement, it
-            divides the length of the list by 2 in the start
 
-            Signature format: hash_{n - 1}, digit_{n - 1}, hash_{n - 2}, digit_{n - 2} ... hash_0, digit_0 (With digits)
-
-            Approximate Max Stack Depth: 2N + D/2
-
-        2)  BruteforceVerifier:
-            Description: This tries each possible value straightforwardly
-
-            Signature format: hash_{n - 1}, hash_{n - 2} ... hash_0 (Without digits)
-
-            Approximate Max Stack Depth: N
-
-        3)  BinarysearchVerifier:
-            Description: This simulates a for loop of hashing using binary search on the digit
-
-            Signature format: hash_{n - 1}, digit_{n - 1}, hash_{n - 2}, digit_{n - 2} ... hash_0, digit_0 (With digits)
-
-            Approximate Max Stack Depth: 2N
-
-        4)  HybridVerifier:
-            Descripton: This narrows the search space first by doing binary search, then uses a list for the remaning space
-            i.e. it uses Algorithm 3 and Algorithm 1 consequently
-
-            Signature format: hash_{n - 1}, digit_{n - 1}, hash_{n - 2}, digit_{n - 2} ... hash_0, digit_0 (With digits)
-
-            Approximate Max Stack Depth: 2N + REMAINING_SPACE_SIZE
-
-    CONVERTER: These are digits to bytes converters
-        1)  TabledConverter:
-            Descripton: This uses a table for the divison of 2
-
-            Approximate Max Stack Depth: N + D
-
-        2)  StraightforwardConverter:
-            Descripton: This just uses OP_IF's to decompose the numbers into bits
-
-            Approximate Max Stack Depth: N
-
-        3)  VoidConverter
-            Description: Does nothing. Leaves digits on the stack in Big Endian order.
-
-    Sample Usage:
-        Pick the algorithms you want to use, i.e. BinarysearchVerifier and StraightforwardConverter
-        Construct your struct: let o = Winternitz::<BinarysearchVerifier, StraightforwardConverter>::new();
-        Choose your n0 and log_d values for the calculation of other variables: let p = Parameters::new(n0, log_d);
-        Use the methods for the necessary operations, for example: o.sign(&p, ...), o.checksig_verify(&p, ...)
-*/
-
+/// This trait covers 3 verifiers for the signing and verifying phase of the signatures: `ListpickVerifier`, `BruteforceVerifier`, `BinarysearchVerifier`
 pub trait Verifier {
-    // Default digit signatures
+    /// Default digit signatures for `ListpickVerifier` and `BinarysearchVerifier`, in the format: hash_{n - 1}, digit_{n - 1}, hash_{n - 2}, digit_{n - 2} ... hash_0, digit_0
     fn sign_digits(ps: &Parameters, secret_key: &SecretKey, digits: Vec<u32>) -> Witness {
         let digits = add_message_checksum(ps, digits);
         let mut result = Witness::new();
-        for i in 0..ps.n {
+        for i in 0..ps.total_length() {
             let sig = digit_signature(secret_key, i, digits[i as usize]);
-            result.push(sig.hash_bytes);
+            result.push(sig.to_vec());
             result.push(u32_to_le_bytes_minimal(digits[i as usize]));
         }
         result
     }
+    fn verify_digits(ps: &Parameters, public_key: &PublicKey) -> Script;
 }
+
+/// This trait covers 2 converters for converting the final message (which is left in the form of blocks): `VoidConverter`, `ToBytesConverter`
 pub trait Converter {
+    /// Wrapper for converter functions 
     fn get_script(ps: &Parameters) -> Script;
+    /// Length of the final message
+    fn length_of_final_message(ps: &Parameters) -> u32;
 }
+/// Winternitz struct to used for its operations \
+/// Sample Usage:
+/// - Pick the algorithms you want to use, i.e. `BinarysearchVerifier` and `ToBytesConverter`
+/// - Construct your struct: `let o = Winternitz::<BinarysearchVerifier, ToBytesConverter>::new()`
+/// - Identify your message parameters:` let p = Parameters::new(message_block_count, block_length)` or `let p = Parameters::new_by_bit_length(number_of_bits_of_the_message, block_length)`
+/// - Use the methods for the necessary operations, for example: `o.sign(&p, ...)`, `o.checksig_verify(&p, ...)`, `o.checksig_verify_remove_message(&p, ...)`
 pub struct Winternitz<VERIFIER: Verifier, CONVERTER: Converter> {
-    phantom0: PhantomData<VERIFIER>,
+    phantom0: PhantomData<VERIFIER>, 
     phantom1: PhantomData<CONVERTER>,
 }
 
@@ -181,6 +146,7 @@ impl<VERIFIER: Verifier, CONVERTER: Converter> Default for Winternitz<VERIFIER, 
     }
 }
 
+/// Implementation of the default functions regardless of the algorithms that are chosen
 impl<VERIFIER: Verifier, CONVERTER: Converter> Winternitz<VERIFIER, CONVERTER> {
     pub const fn new() -> Self {
         Winternitz {
@@ -189,39 +155,57 @@ impl<VERIFIER: Verifier, CONVERTER: Converter> Winternitz<VERIFIER, CONVERTER> {
         }
     }
 
-    pub fn sign_digits(
-        &self,
-        ps: &Parameters,
-        secret_key: &SecretKey,
-        digits: Vec<u32>,
-    ) -> Witness {
+    /// Wrapper to sign the digits
+    pub fn sign_digits(&self, ps: &Parameters, secret_key: &SecretKey, digits: Vec<u32>) -> Witness {
         VERIFIER::sign_digits(ps, secret_key, digits)
     }
 
-    pub fn sign(
-        &self,
-        ps: &Parameters,
-        secret_key: &SecretKey,
-        message_bytes: &Vec<u8>,
-    ) -> Witness {
+    /// Wrapper to sign the message in bytes (converts to digits inside)
+    pub fn sign(&self, ps: &Parameters, secret_key: &SecretKey, message_bytes: &Vec<u8>) -> Witness {
         VERIFIER::sign_digits(
             ps,
             secret_key,
-            bytes_to_u32s(ps.n0, ps.log_d, message_bytes),
+            bytes_to_u32s(ps.message_length, ps.block_length, message_bytes),
         )
     }
 
+    /// Expects the signature in the format of the used verification algorithm, start of the message being on the top and checksum being at the bottom, and verifies if the given signature is accurate leaving digits of the message on the stack start of it being on top
+    pub fn checksig_verify(&self, ps: &Parameters, public_key: &PublicKey) -> Script {
+        script! {
+            { VERIFIER::verify_digits(ps, public_key) }
+            { self.verify_checksum(ps) }
+            { CONVERTER::get_script(ps) }
+        }
+    }
+
+    /// Expects the signature in the format of the used verification algorithm, start of the message being on the top and checksum being at the bottom, and verifies if the given signature is accurate without leaving any trace on stack
+    pub fn checksig_verify_and_clear_stack(&self, ps: &Parameters, public_key: &PublicKey) -> Script {
+        script! {
+            { VERIFIER::verify_digits(ps, public_key) }
+            { self.verify_checksum(ps) }
+            { CONVERTER::get_script(ps) }
+            for _ in 0..(CONVERTER::length_of_final_message(ps) / 2) {
+                OP_2DROP
+            }
+            if CONVERTER::length_of_final_message(ps) % 2 == 1 {
+                OP_DROP
+            }
+        }
+    }
+
+    /// Verifies the checksum after the whole message is verified, expects the digits of the whole message at the alt stack, the first element of the message being at the bottom. \
+    /// Removes the checksum digits and leaves the actual message on stack
     fn verify_checksum(&self, ps: &Parameters) -> Script {
         script! {
-            OP_FROMALTSTACK OP_DUP OP_NEGATE
-            for _ in 1..ps.n0 {
-                OP_FROMALTSTACK OP_TUCK OP_SUB
+            OP_FROMALTSTACK OP_DUP OP_NEGATE 
+            for _ in 1..ps.message_length {
+                OP_FROMALTSTACK OP_TUCK OP_SUB // sum the digits and tuck them before the sum so they are stored for later
             }
-            { ps.d * ps.n0 }
+            { ps.d() * ps.message_length }
             OP_ADD
             OP_FROMALTSTACK
-            for _ in 0..ps.n1 - 1 {
-                for _ in 0..ps.log_d {
+            for _ in 0..ps.checksum_length - 1 {
+                for _ in 0..ps.block_length {
                     OP_DUP OP_ADD
                 }
                 OP_FROMALTSTACK
@@ -232,84 +216,84 @@ impl<VERIFIER: Verifier, CONVERTER: Converter> Winternitz<VERIFIER, CONVERTER> {
     }
 }
 
-pub struct ListpickVerifier {}
-impl Verifier for ListpickVerifier {}
 
-impl<CONVERTER: Converter> Winternitz<ListpickVerifier, CONVERTER> {
-    fn verify_digits(&self, ps: &Parameters, public_key: &PublicKey) -> Script {
+
+/// - Verification Algorithm: Generates hashes for each possible value and then uses `OP_PICK` to get the corresponding one from the created list. \
+///   As a small improvement, it also divides the length of the list by 2 in the start 
+/// - Signature format: hash_{n - 1}, digit_{n - 1}, hash_{n - 2}, digit_{n - 2} ... hash_0, digit_0 (With digits) 
+/// - Approximate Max Stack Depth Used During Verification: 2 * `total_length()` + (2 ^ `block_length`)/2   
+pub struct ListpickVerifier {}
+impl Verifier for ListpickVerifier {
+    /// Expects the signature in the verifier's format, checks and verifies if the given signature is accurate with the given public key, leaving the message (with checksum) on the stack in given order
+    fn verify_digits(ps: &Parameters, public_key: &PublicKey) -> Script {
         script! {
-            for digit_index in 0..ps.n {
+            for digit_index in 0..ps.total_length() {
                 // See https://github.com/BitVM/BitVM/issues/35
-                { ps.d }
+                { ps.d() }
                 OP_MIN
                 OP_DUP
                 OP_TOALTSTACK
-                { (ps.d + 1) / 2 }
+                { (ps.d() + 1) / 2 }
                 OP_2DUP
                 OP_LESSTHAN
                 OP_IF
                     OP_DROP
                     OP_TOALTSTACK
-                    for _ in 0..(ps.d + 1) / 2  {
+                    for _ in 0..(ps.d() + 1) / 2  {
                         OP_HASH160
                     }
                 OP_ELSE
                     OP_SUB
                     OP_TOALTSTACK
                 OP_ENDIF
-                for _ in 0..ps.d/2 {
+                for _ in 0..ps.d()/2 {
                     OP_DUP OP_HASH160
                 }
                 OP_FROMALTSTACK
                 OP_PICK
-                { (public_key[ps.n as usize - 1 - digit_index as usize]).to_vec() }
+                { (public_key[ps.total_length() as usize - 1 - digit_index as usize]).to_vec() }
                 OP_EQUALVERIFY
-                for _ in 0..(ps.d + 1)/4 {
+                for _ in 0..(ps.d() + 1) / 4 {
                     OP_2DROP
                 }
             }
         }
     }
-
-    pub fn checksig_verify(&self, ps: &Parameters, public_key: &PublicKey) -> Script {
-        let mut script = self.verify_digits(ps, public_key);
-        script = script.push_script(self.verify_checksum(ps).compile());
-        script.push_script(CONVERTER::get_script(ps).compile())
-    }
 }
-
+/// - Verification Algorithm: Tries each possible digit value
+/// - Signature Format: hash_{n - 1}, hash_{n - 2} ... hash_0 (Without digits)
+/// - Approximate Max Stack Depth Used During Verification: `total_length()`
 pub struct BruteforceVerifier {}
 impl Verifier for BruteforceVerifier {
+    /// Signature in the verifier's format
     fn sign_digits(ps: &Parameters, secret_key: &SecretKey, digits: Vec<u32>) -> Witness {
         let digits = add_message_checksum(ps, digits);
         let mut result = Witness::new();
-        for i in 0..ps.n {
+        for i in 0..ps.total_length() {
             let sig = digit_signature(secret_key, i, digits[i as usize]);
-            result.push(sig.hash_bytes);
+            result.push(sig.to_vec());
         }
         result
     }
-}
-
-impl<CONVERTER: Converter> Winternitz<BruteforceVerifier, CONVERTER> {
-    fn verify_digits(&self, ps: &Parameters, public_key: &PublicKey) -> Script {
+    /// Expects the signature in the verifier's format, checks and verifies if the given signature is accurate with the given public key, leaving the message (with checksum) on the stack in given order
+    fn verify_digits(ps: &Parameters, public_key: &PublicKey) -> Script {
         script! {
-            for digit_index in 0..ps.n {
-                { public_key[(ps.n - 1 - digit_index) as usize].to_vec() }
+            for digit_index in 0..ps.total_length() {
+                { public_key[(ps.total_length() - 1 - digit_index) as usize].to_vec() }
                 OP_SWAP
-                { -1 } OP_TOALTSTACK
+                { -1 } OP_TOALTSTACK // To avoid illegal stack acces, same -1 is checked later 
                 OP_2DUP
                 OP_EQUAL
                 OP_IF
-                    {ps.d}
+                    {ps.d()}
                     OP_TOALTSTACK
                 OP_ENDIF
-                for i in 0..ps.d {
+                for i in 0..ps.d() {
                     OP_HASH160
                     OP_2DUP
                     OP_EQUAL
                     OP_IF
-                        {ps.d-i-1}
+                        { ps.d() - i - 1 }
                         OP_TOALTSTACK
                     OP_ENDIF
                 }
@@ -323,28 +307,25 @@ impl<CONVERTER: Converter> Winternitz<BruteforceVerifier, CONVERTER> {
             }
         }
     }
-
-    pub fn checksig_verify(&self, ps: &Parameters, public_key: &PublicKey) -> Script {
-        let mut script = self.verify_digits(ps, public_key);
-        script = script.push_script(self.verify_checksum(ps).compile());
-        script.push_script(CONVERTER::get_script(ps).compile())
-    }
 }
 
-pub struct BinarysearchVerifier {}
-impl Verifier for BinarysearchVerifier {}
 
-impl<CONVERTER: Converter> Winternitz<BinarysearchVerifier, CONVERTER> {
-    fn verify_digits(&self, ps: &Parameters, public_key: &PublicKey) -> Script {
+/// - Verification Algorithm: Simulates a for loop of hashing using binary search on the digit
+/// - Signature Format: hash_{n - 1}, digit_{n - 1}, hash_{n - 2}, digit_{n - 2} ... hash_0, digit_0 (With digits)
+/// - Approximate Max Stack Depth Used During Verification: 2 * `total_length()`
+pub struct BinarysearchVerifier {}
+impl Verifier for BinarysearchVerifier {
+    /// Expects the signature in the verifier's format, checks and verifies if the given signature is accurate with the given public key, leaving the message (with checksum) on the stack in given order
+    fn verify_digits(ps: &Parameters, public_key: &PublicKey) -> Script {
         script! {
-            for digit_index in 0..ps.n {
+            for digit_index in 0..ps.total_length() {
                 //one can send digits out of the range, i.e. negative or bigger than D for it to act as in range, so inorder for checksum to not be decreased, a lower bound check is necessary and enough
                 OP_0
                 OP_MAX
                 OP_DUP
                 OP_TOALTSTACK
-                {ps.d} OP_SWAP OP_SUB
-                for bit in (0..ps.log_d).rev() {
+                { ps.d() } OP_SWAP OP_SUB
+                for bit in (0..ps.block_length).rev() {
                     if bit != 0 {
                         {1 << bit}
                         OP_2DUP
@@ -352,7 +333,7 @@ impl<CONVERTER: Converter> Winternitz<BinarysearchVerifier, CONVERTER> {
                         OP_IF
                             OP_SUB
                             OP_SWAP
-                            for _ in 0..(1<<bit) {
+                            for _ in 0..(1 << bit) {
                                 OP_HASH160
                             }
                             OP_SWAP
@@ -365,205 +346,50 @@ impl<CONVERTER: Converter> Winternitz<BinarysearchVerifier, CONVERTER> {
                         OP_ENDIF
                     }
                 }
-                { (public_key[(ps.n - 1 - digit_index) as usize]).to_vec() }
+                { (public_key[(ps.total_length() - 1 - digit_index) as usize]).to_vec() }
                 OP_EQUALVERIFY
             }
         }
     }
-
-    pub fn checksig_verify(&self, ps: &Parameters, public_key: &PublicKey) -> Script {
-        let mut script = self.verify_digits(ps, public_key);
-        script = script.push_script(self.verify_checksum(ps).compile());
-        script.push_script(CONVERTER::get_script(ps).compile())
-    }
 }
 
-pub struct HybridVerifier {}
-impl Verifier for HybridVerifier {}
-
-impl<CONVERTER: Converter> Winternitz<HybridVerifier, CONVERTER> {
-    fn verify_digits(&self, ps: &Parameters, public_key: &PublicKey, block_log_d: u32) -> Script {
-        let block_d = (1 << block_log_d) - 1;
-        script! {
-            for digit_index in 0..ps.n {
-                { ps.d }
-                OP_MIN
-                OP_DUP
-                OP_TOALTSTACK
-                {ps.d} OP_SWAP OP_SUB
-                for bit in (block_log_d..ps.log_d).rev() {
-                    {1 << bit}
-                    OP_2DUP
-                    OP_GREATERTHANOREQUAL
-                    OP_IF
-                        OP_SUB
-                        OP_SWAP
-                        for _ in 0..(1<<bit) {
-                            OP_HASH160
-                        }
-                        OP_SWAP
-                        OP_DUP
-                    OP_ENDIF
-                    OP_DROP
-                }
-                {block_d} OP_SWAP OP_SUB //turn to positive form
-                OP_TOALTSTACK
-                for _ in 0..block_d {
-                    OP_DUP
-                    OP_HASH160
-                }
-                OP_FROMALTSTACK
-                OP_PICK
-                { (public_key[(ps.n - 1 - digit_index) as usize]).to_vec() }
-                OP_EQUALVERIFY
-                for _ in 0..((block_d + 1)/2) {
-                    OP_2DROP
-                }
-            }
-        }
-    }
-
-    pub fn checksig_verify(
-        &self,
-        ps: &Parameters,
-        public_key: &PublicKey,
-        block_log_d: u32,
-    ) -> Script {
-        assert!((1..ps.log_d).contains(&block_log_d));
-        let mut script = self.verify_digits(ps, public_key, block_log_d);
-        script = script.push_script(self.verify_checksum(ps).compile());
-        script.push_script(CONVERTER::get_script(ps).compile())
-    }
-}
-
+/// Does nothing, leaving each stack each element as a block from Winternitz
 pub struct VoidConverter {}
 impl Converter for VoidConverter {
+    fn length_of_final_message(ps: &Parameters) -> u32 {
+        return ps.message_length;
+    }
     fn get_script(ps: &Parameters) -> Script {
         let _ = ps;
         script! {}
     }
 }
 
-pub struct TabledConverter {}
-impl Converter for TabledConverter {
-    fn get_script(ps: &Parameters) -> Script {
-        let mut turning_into_bytes;
-        if ps.log_d == 8 {
-            //already bytes
-            turning_into_bytes = script! {};
-        } else if ps.log_d == 4 {
-            turning_into_bytes = script! {
-                for i in 0..ps.n0 / 2 {
-                    OP_SWAP
-                    for _ in 0..ps.log_d {
-                        OP_DUP OP_ADD
-                    }
-                    OP_ADD
-                    if i != (ps.n0/2) - 1 {
-                        OP_TOALTSTACK
-                    }
-                }
-                if ps.n0 > 1 {
-                    for _ in 0..ps.n0 / 2 - 1{
-                        OP_FROMALTSTACK
-                    }
-                }
-            };
-        } else {
-            turning_into_bytes = script! {
-                //create division by two table i.e. table(x) = floor(x/2)
-                {ps.d/2}
-                for _ in 1..(ps.d+1)/2 {
-                    OP_DUP OP_DUP
-                    OP_1SUB
-                }
-                OP_DUP
-            };
-            //convert
-            let mut current_byte_len = 0;
-            let mut script_lines = vec![];
-            script_lines.push(script! {
-                OP_0
-                OP_TOALTSTACK
-            });
-            for _ in 0..ps.n0 {
-                let mut left = ps.log_d;
-                script_lines.push(script! {
-                    {ps.d + 1} OP_ROLL
-                });
-                while left > 0 {
-                    if current_byte_len == 8 {
-                        current_byte_len = 0;
-                        script_lines.push(script! {
-                            OP_0
-                            OP_TOALTSTACK
-                        });
-                    }
-                    let take = min(left, 8 - current_byte_len);
-                    script_lines.push(script! {
-                        OP_DUP
-                        OP_TOALTSTACK
-                        for _ in 0..take {
-                            OP_PICK
-                        }
-                        OP_DUP
-                        for _ in 0..take {
-                            OP_DUP OP_ADD
-                        }
-                        OP_FROMALTSTACK
-                        OP_SWAP OP_SUB
-                        for _ in 0..current_byte_len {
-                            OP_DUP OP_ADD
-                        }
-                        OP_FROMALTSTACK
-                        OP_ADD
-                        OP_TOALTSTACK
-                    });
-                    current_byte_len += take;
-                    left -= take;
-                }
-                script_lines.push(script! {
-                    OP_DROP
-                });
-            }
-            //clear the table
-            script_lines.push(script! {
-                for _ in 0..(ps.d + 1)/2 {
-                    OP_2DROP
-                }
-                for _ in 0..ps.byte_message_length() {
-                    OP_FROMALTSTACK
-                }
-            });
-            for script_line in script_lines {
-                turning_into_bytes = turning_into_bytes.push_script(script_line.compile());
-            }
-        }
-        turning_into_bytes
+/// Alters message (divides it into 8 bit pieces), leaving each stack each element as a byte
+pub struct ToBytesConverter {}
+impl Converter for ToBytesConverter {
+    fn length_of_final_message(ps: &Parameters) -> u32 {
+        return ps.byte_message_length();
     }
-}
-
-pub struct StraightforwardConverter {}
-impl Converter for StraightforwardConverter {
     fn get_script(ps: &Parameters) -> Script {
         let mut turning_into_bytes = script! {};
-        if ps.log_d == 8 {
+        if ps.block_length == 8 {
             //already bytes
             turning_into_bytes = script! {};
-        } else if ps.log_d == 4 {
+        } else if ps.block_length == 4 {
             turning_into_bytes = script! {
-                for i in 0..ps.n0 / 2 {
+                for i in 0..ps.message_length / 2 {
                     OP_SWAP
-                    for _ in 0..ps.log_d {
+                    for _ in 0..ps.block_length {
                         OP_DUP OP_ADD
                     }
                     OP_ADD
-                    if i != (ps.n0/2) - 1 {
+                    if i != (ps.message_length/2) - 1 {
                         OP_TOALTSTACK
                     }
                 }
-                if ps.n0 > 1 {
-                    for _ in 0..ps.n0 / 2 - 1{
+                if ps.message_length > 1 {
+                    for _ in 0..ps.message_length / 2 - 1{
                         OP_FROMALTSTACK
                     }
                 }
@@ -571,22 +397,22 @@ impl Converter for StraightforwardConverter {
         } else {
             let mut lens: Vec<u32> = vec![];
             let mut script_lines: Vec<Script> = vec![];
-            for i in 0..ps.n0 {
-                let start = i * ps.log_d;
+            for i in 0..ps.message_length {
+                let start = i * ps.block_length;
                 let next_stop = start + 8 - (start % 8);
                 let split = next_stop - start;
-                if split >= ps.log_d {
-                    lens.push(ps.log_d);
+                if split >= ps.block_length {
+                    lens.push(ps.block_length);
                     script_lines.push(script! {
                         OP_TOALTSTACK
                     });
                 } else {
                     lens.push(split);
-                    lens.push(ps.log_d - split);
+                    lens.push(ps.block_length - split);
                     script_lines.push(script! {
                         OP_0
-                        for j in (split..ps.log_d).rev() {
-                            if j != ps.log_d - 1 {
+                        for j in (split..ps.block_length).rev() {
+                            if j != ps.block_length - 1 {
                                 OP_DUP OP_ADD
                             }
                             OP_SWAP
@@ -610,14 +436,13 @@ impl Converter for StraightforwardConverter {
                 }
             }
             lens.reverse();
-            let mut last_bytes = (8 - (ps.n0 * ps.log_d % 8)) % 8;
+            let mut last_bytes = (8 - (ps.message_length * ps.block_length % 8)) % 8;
             let mut is_last_zero = true;
             script_lines.push(script! {
                 OP_0
             });
             for l in lens {
                 if last_bytes >= 8 {
-                    //assert!(last_bytes == 8);
                     last_bytes = 0;
                     script_lines.push(script! {
                         OP_0
@@ -665,10 +490,10 @@ mod test {
         res.to_string()
     }
 
-    //This test is not extensive and definitely misses corner cases, if there are any
+    // This test is not extensive and definitely misses corner cases
     fn try_malicious(ps: &Parameters, _message: &Vec<u8>, verifier: &str) -> Script {
         let mut rng = MALICIOUS_RNG.lock().unwrap();
-        let ind = rng.gen_range(0..ps.n);
+        let ind = rng.gen_range(0..ps.total_length());
         if verifier == get_type_name::<BruteforceVerifier>() {
             script! {
                 for _ in 0..ind {
@@ -707,8 +532,8 @@ mod test {
             println!(
                 "Winternitz signature size:\n \t{:?} bytes / {:?} bits \n\t{:?} bytes / bit\n",
                 $s.len(),
-                $ps.n0 * $ps.log_d,
-                $s.len() as f64 / ($ps.n0 * $ps.log_d) as f64
+                $ps.message_length * $ps.block_length,
+                $s.len() as f64 / ($ps.message_length * $ps.block_length) as f64
             );
             if $desired_outcome == true {
                 assert!(
@@ -725,7 +550,7 @@ mod test {
             }
         };
     }
-    macro_rules! generate_regular_winternitz_tests {
+    macro_rules! generate_winternitz_tests {
         (
             $ps:expr, $secret_key:expr, $public_key:expr, $message:expr, $message_checker:expr, $desired_outcome:expr;
             $([$verifier:ty, $converter:ty]),*
@@ -733,7 +558,7 @@ mod test {
             $(
                 {
                     let o = Winternitz::<$verifier, $converter>::new();
-                    let s = script! {
+                    let standard_script = script! {
                         { o.sign(&$ps, &$secret_key, &$message) }
                         if $desired_outcome == false {
                              { try_malicious(&$ps, &$message, &get_type_name::<$verifier>()) }
@@ -741,30 +566,15 @@ mod test {
                         { o.checksig_verify(&$ps, &$public_key) }
                     };
 
-                    println!("For N0:{} and LOG_D:{}  {} with {} =>", $ps.n0, $ps.log_d, get_type_name::<$verifier>(), get_type_name::<$converter>());
-                    test_script!($ps, s, $message_checker, $desired_outcome);
-                }
-            )*
-        };
-    }
-    macro_rules! generate_hybrid_winternitz_tests {
-        (
-            $ps:expr, $secret_key:expr, $public_key:expr, $message:expr, $message_checker:expr, $desired_outcome:expr;
-            $([$converter:ty]),*
-        ) => {
-            $(
-                {
-                    let o = Winternitz::<HybridVerifier, $converter>::new();
-                    for i in 1..$ps.log_d {
-                        let s = script! {
+                    println!("For message_length:{} and block_length:{}  {} with {} =>", $ps.message_length, $ps.block_length, get_type_name::<$verifier>(), get_type_name::<$converter>());
+                    test_script!($ps, standard_script, $message_checker, $desired_outcome);
+                    if $desired_outcome == true {
+                        let message_remove_script = script! {
                             { o.sign(&$ps, &$secret_key, &$message) }
-                            if $desired_outcome == false {
-                                { try_malicious(&$ps, &$message, &get_type_name::<HybridVerifier>()) }
-                           }
-                            { o.checksig_verify(&$ps, &$public_key, i) }
+                            { o.checksig_verify_and_clear_stack(&$ps, &$public_key) }
+                            OP_TRUE
                         };
-                        println!("For N0:{} and LOG_D:{}  {} with {} block_log_d:{} =>", $ps.n0, $ps.log_d, get_type_name::<HybridVerifier>(), get_type_name::<$converter>(), i);
-                        test_script!($ps, s, $message_checker, $desired_outcome);
+                        assert!(execute_script(message_remove_script).success == true);                    
                     }
                 }
             )*
@@ -777,7 +587,7 @@ mod test {
             Ok(bytes) => bytes,
             Err(_) => panic!("Invalid hex string"),
         };
-        let ps = Parameters::new(8, 4);
+        let ps = Parameters::new_by_bit_length(32, 4);
         let public_key = generate_public_key(&ps, &secret_key);
 
         let message = 860033 as u32;
@@ -800,10 +610,7 @@ mod test {
             OP_EQUAL
             
         };
-
-        let result = execute_script(s);
-
-        assert!(result.success);
+        run(s);
     }
 
     #[test]
@@ -815,7 +622,7 @@ mod test {
         let mut prng = ChaCha20Rng::seed_from_u64(37);
         for _ in 0..TEST_COUNT {
             let ps = Parameters::new(prng.gen_range(1..200), prng.gen_range(4..=8));
-            let message_byte_size = ps.n0 * ps.log_d / 8;
+            let message_byte_size = ps.message_length * ps.block_length / 8;
             let mut message = vec![0u8; message_byte_size as usize];
             let mut return_message = vec![0; ps.byte_message_length() as usize];
             for i in 0..message_byte_size {
@@ -833,19 +640,28 @@ mod test {
                     }
                 }
             };
-            generate_regular_winternitz_tests!(
+            generate_winternitz_tests!(
                 ps, secret_key, public_key, message, message_checker, true;
-                [ListpickVerifier, TabledConverter],
-                [ListpickVerifier, StraightforwardConverter],
-                [BruteforceVerifier, TabledConverter],
-                [BruteforceVerifier, StraightforwardConverter],
-                [BinarysearchVerifier, TabledConverter],
-                [BinarysearchVerifier, StraightforwardConverter]
+                [ListpickVerifier, ToBytesConverter],
+                [BruteforceVerifier, ToBytesConverter],
+                [BinarysearchVerifier, ToBytesConverter]
             );
-            generate_hybrid_winternitz_tests!(
-                ps, secret_key, public_key, message, message_checker, true;
-                [TabledConverter],
-                [StraightforwardConverter]
+            let message_digits = bytes_to_u32s(ps.message_length, ps.block_length, &message);
+            let void_message_checker = script! {
+                for i in 0..ps.message_length {
+                    { message_digits[i as usize] }
+                    if i == ps.message_length - 1 {
+                        OP_EQUAL
+                    } else {
+                        OP_EQUALVERIFY
+                    }
+                }
+            };
+            generate_winternitz_tests!(
+                ps, secret_key, public_key, message, void_message_checker, true;
+                [ListpickVerifier, VoidConverter],
+                [BruteforceVerifier, VoidConverter],
+                [BinarysearchVerifier, VoidConverter]
             );
         }
     }
@@ -859,7 +675,7 @@ mod test {
         let mut prng = ChaCha20Rng::seed_from_u64(37);
         for _ in 0..TEST_COUNT {
             let ps = Parameters::new(prng.gen_range(1..200), prng.gen_range(4..=8));
-            let message_byte_size = ps.n0 * ps.log_d / 8;
+            let message_byte_size = ps.message_length * ps.block_length / 8;
             let mut message = vec![0u8; message_byte_size as usize];
             let mut return_message = vec![0; ps.byte_message_length() as usize];
             for i in 0..message_byte_size {
@@ -877,19 +693,28 @@ mod test {
                     }
                 }
             };
-            generate_regular_winternitz_tests!(
+            generate_winternitz_tests!(
                 ps, secret_key, public_key, message, message_checker, false;
-                [ListpickVerifier, TabledConverter],
-                [ListpickVerifier, StraightforwardConverter],
-                [BruteforceVerifier, TabledConverter],
-                [BruteforceVerifier, StraightforwardConverter],
-                [BinarysearchVerifier, TabledConverter],
-                [BinarysearchVerifier, StraightforwardConverter]
+                [ListpickVerifier, ToBytesConverter],
+                [BruteforceVerifier, ToBytesConverter],
+                [BinarysearchVerifier, ToBytesConverter]
             );
-            generate_hybrid_winternitz_tests!(
-                ps, secret_key, public_key, message, message_checker, false;
-                [TabledConverter],
-                [StraightforwardConverter]
+            let message_digits = bytes_to_u32s(ps.message_length, ps.block_length, &message);
+            let void_message_checker = script! {
+                for i in 0..ps.message_length {
+                    { message_digits[i as usize] }
+                    if i == ps.message_length - 1 {
+                        OP_EQUAL
+                    } else {
+                        OP_EQUALVERIFY
+                    }
+                }
+            };
+            generate_winternitz_tests!(
+                ps, secret_key, public_key, message, void_message_checker, false;
+                [ListpickVerifier, VoidConverter],
+                [BruteforceVerifier, VoidConverter],
+                [BinarysearchVerifier, VoidConverter]
             );
         }
     }

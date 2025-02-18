@@ -1,5 +1,6 @@
 use crate::treepp::*;
 
+/// Calculates ceil(log_base(n))
 pub(super) const fn log_base_ceil(n: u32, base: u32) -> u32 { 
     let mut res: u32 = 0;
     let mut cur: u64 = 1;
@@ -10,6 +11,7 @@ pub(super) const fn log_base_ceil(n: u32, base: u32) -> u32 {
     res
 }
 
+/// Converts the number to given base, smallest digit being at the start (returns `digit_count` smallest digits of it, and standard base representation of it if `digit_count` = -1)
 pub(super) fn to_digits(mut number: u32, base: u32, digit_count: i32) -> Vec<u32> {
     let mut digits = Vec::new();
     if digit_count == -1 {
@@ -29,9 +31,9 @@ pub(super) fn to_digits(mut number: u32, base: u32, digit_count: i32) -> Vec<u32
     digits
 }
 
-//This function can change dramatically (for example it can be reversed, those kind of things can reduce the script size a lot but current optimizations are for the straightforward transformation)
+/// Converts the given bytes to 'len' `u32`'s, each consisting of given number of bits
 pub(crate) fn bytes_to_u32s(len: u32, bits_per_item: u32, bytes: &Vec<u8>) -> Vec<u32> {
-    assert!(bytes.len() as u32 * 8 <= len * bits_per_item, "Message length is too large for the parameters"); 
+    assert!(bytes.len() as u32 * 8 <= len * bits_per_item, "Message length is too large for the given length"); 
     let mut res = vec![0u32; len as usize];
     let mut cur_index: u32 = 0;
     let mut cur_bit: u32 = 0;
@@ -50,8 +52,8 @@ pub(crate) fn bytes_to_u32s(len: u32, bits_per_item: u32, bytes: &Vec<u8>) -> Ve
     res
 }
 
+/// Merges (binary concatenates) the `DIGIT_COUNT` stack elements (each consisting of `LOG_D` bits), most significant one being at the top
 pub fn digits_to_number<const DIGIT_COUNT: usize, const LOG_D: usize>() -> Script {
-  // Expects digits in order on stack in Big Endian (most significant bytes at bottom of stack, least significant bytes at top of stack)
   script!(
       for _ in 0..DIGIT_COUNT - 1 {
         OP_TOALTSTACK
@@ -66,6 +68,7 @@ pub fn digits_to_number<const DIGIT_COUNT: usize, const LOG_D: usize>() -> Scrip
   )
 }
 
+/// Converts number to vector of bytes and removes trailing zeroes
 pub fn u32_to_le_bytes_minimal(a: u32) -> Vec<u8> {
     let mut a_bytes = a.to_le_bytes().to_vec();
     while let Some(&0) = a_bytes.last() {

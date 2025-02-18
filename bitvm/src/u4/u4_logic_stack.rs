@@ -15,10 +15,10 @@ pub fn u4_push_half_and_table_stack(stack: &mut StackTracker) -> StackVariable {
 
 /// Push half XOR table
 pub fn u4_push_half_xor_table_stack(stack: &mut StackTracker) -> StackVariable {
-    stack.var(136, u4_push_half_xor_table(), "xor_table")
+    stack.var(136, u4_push_half_xor_table(), "xor_half_table")
 }
 
-/// Push full AND table
+/// Push full XOR table
 pub fn u4_push_full_xor_table_stack(stack: &mut StackTracker) -> StackVariable {
     stack.var(256, u4_push_full_xor_table(), "xor_full_table")
 }
